@@ -2,7 +2,6 @@ package com.jothivel.chits.ui.auth
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -26,13 +25,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -106,117 +100,20 @@ private fun RoleModeToggle(selected: String, onSelect: (String) -> Unit) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// HANGING TEMPLE LAMP — decorative "kuthu vilakku" style oil lamp drawn in code
-// (no image asset - a gold-on-maroon illustration matching the app's traditional theme)
+// HANGING MARIGOLD GARLAND — decorative toranam banner at the top of the login screen
+// (res/drawable-nodpi/marigold_garland.png, background removed from the user-supplied photo)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 @Composable
-private fun HangingLamp(modifier: Modifier = Modifier) {
-    val gold = Color(0xFFD4AF37)
-    val goldLight = Color(0xFFF8E7B0)
-    val goldMid = Color(0xFFC9962E)
-    val goldDark = Color(0xFF7A5A18)
-    val flameCore = Color(0xFFFFF7CE)
-    val flameMid = Color(0xFFFFC94A)
-    val flameOuter = Color(0xFFFF7A00)
-
-    Canvas(modifier = modifier.width(68.dp).height(128.dp)) {
-        val cx = size.width / 2f
-        val w = size.width
-        val h = size.height
-
-        // Chain from the ceiling
-        drawLine(goldLight.copy(alpha = 0.9f), Offset(cx, 0f), Offset(cx, h * 0.30f), strokeWidth = 3f)
-        listOf(0.06f, 0.14f, 0.22f).forEach { f ->
-            drawCircle(goldLight, radius = 3.6f, center = Offset(cx, h * f))
-        }
-
-        // Ornate lotus-bud finial where the chain meets the lamp
-        val finialY = h * 0.34f
-        val finial = Path().apply {
-            moveTo(cx, finialY - 13f)
-            cubicTo(cx + 11f, finialY - 10f, cx + 12f, finialY + 4f, cx, finialY + 13f)
-            cubicTo(cx - 12f, finialY + 4f, cx - 11f, finialY - 10f, cx, finialY - 13f)
-            close()
-        }
-        drawPath(finial, brush = Brush.verticalGradient(listOf(goldLight, gold, goldMid)))
-        drawPath(finial, color = goldDark.copy(alpha = 0.6f), style = Stroke(width = 1.5f))
-
-        // Short stem down to the bowl
-        val stemTop = finialY + 13f
-        val bowlTop = h * 0.56f
-        drawLine(gold, Offset(cx, stemTop), Offset(cx, bowlTop), strokeWidth = 4f)
-
-        // Decorative side arms with small drop-beads (kuthu vilakku style)
-        listOf(-1f, 1f).forEach { side ->
-            val armEnd = Offset(cx + side * w * 0.34f, bowlTop - 6f)
-            val arm = Path().apply {
-                moveTo(cx, stemTop + 6f)
-                cubicTo(cx + side * w * 0.20f, stemTop - 2f, cx + side * w * 0.20f, stemTop - 2f, armEnd.x, armEnd.y)
-            }
-            drawPath(arm, color = goldMid, style = Stroke(width = 2.2f, cap = StrokeCap.Round))
-            drawCircle(gold, radius = 3.4f, center = armEnd)
-        }
-
-        // Lamp bowl - a filled, wide shallow saucer that catches the light
-        val bowlWidth = w * 0.9f
-        val bowlHeight = h * 0.16f
-        val bowl = Path().apply {
-            moveTo(cx - bowlWidth / 2f, bowlTop)
-            cubicTo(cx - bowlWidth / 4f, bowlTop + bowlHeight * 1.9f, cx + bowlWidth / 4f, bowlTop + bowlHeight * 1.9f, cx + bowlWidth / 2f, bowlTop)
-            cubicTo(cx + bowlWidth / 4f, bowlTop + bowlHeight * 0.55f, cx - bowlWidth / 4f, bowlTop + bowlHeight * 0.55f, cx - bowlWidth / 2f, bowlTop)
-            close()
-        }
-        drawPath(bowl, brush = Brush.verticalGradient(listOf(goldMid, gold, goldDark)))
-        // Rim highlight
-        drawArc(
-            color = goldLight.copy(alpha = 0.9f),
-            startAngle = 190f,
-            sweepAngle = 160f,
-            useCenter = false,
-            topLeft = Offset(cx - bowlWidth / 2f, bowlTop - bowlHeight * 0.35f),
-            size = Size(bowlWidth, bowlHeight * 1.1f),
-            style = Stroke(width = 2f, cap = StrokeCap.Round)
-        )
-        // Little decorative petals at the bowl's edges
-        listOf(-1f, 1f).forEach { side ->
-            val petal = Path().apply {
-                moveTo(cx + side * bowlWidth / 2f, bowlTop)
-                lineTo(cx + side * (bowlWidth / 2f + 7f), bowlTop + 3f)
-                lineTo(cx + side * bowlWidth / 2f, bowlTop + 7f)
-                close()
-            }
-            drawPath(petal, brush = Brush.verticalGradient(listOf(goldLight, goldMid)))
-        }
-
-        // Glowing flame - soft outer halo, warm mid glow, bright core
-        val flameCenter = Offset(cx, bowlTop - 16f)
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(flameOuter.copy(alpha = 0.45f), flameOuter.copy(alpha = 0.15f), Color.Transparent),
-                center = flameCenter,
-                radius = 40f
-            ),
-            radius = 40f,
-            center = flameCenter
-        )
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(flameCore.copy(alpha = 0.95f), flameMid.copy(alpha = 0.55f), Color.Transparent),
-                center = flameCenter,
-                radius = 22f
-            ),
-            radius = 22f,
-            center = flameCenter
-        )
-        val flame = Path().apply {
-            moveTo(flameCenter.x, flameCenter.y - 14f)
-            cubicTo(flameCenter.x + 8f, flameCenter.y - 5f, flameCenter.x + 5f, flameCenter.y + 9f, flameCenter.x, flameCenter.y + 12f)
-            cubicTo(flameCenter.x - 5f, flameCenter.y + 9f, flameCenter.x - 8f, flameCenter.y - 5f, flameCenter.x, flameCenter.y - 14f)
-            close()
-        }
-        drawPath(flame, brush = Brush.verticalGradient(listOf(flameCore, flameMid, flameOuter)))
-    }
+private fun MarigoldGarlandHeader(modifier: Modifier = Modifier) {
+    Image(
+        painter = painterResource(id = R.drawable.marigold_garland),
+        contentDescription = null,
+        modifier = modifier
+            .fillMaxWidth()
+            .height(150.dp),
+        contentScale = ContentScale.FillHeight
+    )
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -310,11 +207,8 @@ fun PinLoginScreen(
             .statusBarsPadding(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // ── Hanging temple lamps ──────────────────────────────────────────
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            HangingLamp()
-            HangingLamp()
-        }
+        // ── Hanging marigold garland ──────────────────────────────────────
+        MarigoldGarlandHeader()
 
         Spacer(modifier = Modifier.weight(0.8f))
 
@@ -493,10 +387,7 @@ fun AgentPinLoginScreen(
             .statusBarsPadding(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            HangingLamp()
-            HangingLamp()
-        }
+        MarigoldGarlandHeader()
 
         Spacer(modifier = Modifier.height(if (isVisible) 24.dp else 24.dp))
 
