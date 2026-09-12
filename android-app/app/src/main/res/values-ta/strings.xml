@@ -1,0 +1,67 @@
+<resources>
+    <string name="app_name">ஜோதி வேல் சிட்ஸ்</string>
+    <string name="login_title">ஜோதி வேல் சிட்ஸ்</string>
+    <string name="phone_number">தொலைபேசி எண்</string>
+    <string name="password_or_pin">கடவுச்சொல் அல்லது PIN</string>
+    <string name="login_button">உள்நுழைக</string>
+    <string name="dashboard_title">முகப்பு</string>
+    <string name="error_invalid_credentials">தவறான தொலைபேசி எண் அல்லது கடவுச்சொல்</string>
+    <string name="groups">குழுக்கள்</string>
+    <string name="members">உறுப்பினர்கள்</string>
+    <string name="collections">வசூல்</string>
+    <string name="reports">அறிக்கைகள்</string>
+    <string name="status_paid">செலுத்தப்பட்டது</string>
+    <string name="status_due">நிலுவை</string>
+    <string name="status_overdue">கெடு முடிந்தது</string>
+    <string name="nav_home">முகப்பு</string>
+    <string name="nav_chits">சிட்டுகள்</string>
+    <string name="nav_ledger">கணக்கு</string>
+    <string name="nav_alerts">அறிவிப்புகள்</string>
+    <string name="nav_settings">அமைப்புகள்</string>
+
+    <string name="login_tagline">நம்பிக்கை · எளிமை · வெளிப்படைத்தன்மை</string>
+    <string name="mobile_number">மொபைல் எண்</string>
+    <string name="username">பயனர் பெயர்</string>
+    <string name="forgot_pin">PIN மறந்துவிட்டதா?</string>
+    <string name="welcome_back">மீண்டும் வருக</string>
+    <string name="active_chits">செயலில் உள்ள சிட்டுகள்</string>
+    <string name="total_members_caps">மொத்த உறுப்பினர்கள்</string>
+    <string name="this_month">இந்த மாதம்</string>
+    <string name="pending">நிலுவை</string>
+    <string name="across_all_chits">அனைத்து சிட்டுகளிலும்</string>
+    <string name="collected">வசூலானது</string>
+    <string name="members_overdue">உறுப்பினர்கள் நிலுவை</string>
+    <string name="auction_pending">[Chit Name] ஏலம் நிலுவையில் உள்ளது</string>
+    <string name="tap_to_conduct">இந்த மாத ஏலத்தை நடத்த அழுத்தவும் →</string>
+    <string name="quick_actions">விரைவுச் செயல்கள்</string>
+    <string name="chit_groups">சிட்டு குழுக்கள்</string>
+    <string name="new_chit">புதிய சிட்டு</string>
+    <string name="record_payment">பேமெண்ட்</string>
+    <string name="active_groups_format">%s குழுக்கள்</string>
+    <string name="create_a_group">குழுவை உருவாக்கு</string>
+    <string name="total_format">%s மொத்தம்</string>
+    <string name="pending_format">%s நிலுவை</string>
+    
+    <!-- Dashboard Additions -->
+    <string name="good_morning">காலை வணக்கம்</string>
+    <string name="good_afternoon">மதிய வணக்கம்</string>
+    <string name="good_evening">மாலை வணக்கம்</string>
+    <string name="good_night">இரவு வணக்கம்</string>
+    <string name="auction">ஏலம்</string>
+    <string name="record_auction">ஏலத்தை பதிவு செய்</string>
+    <string name="members_count">%s உறுப்பினர்கள்</string>
+    
+    <!-- Settings Screen -->
+    <string name="system_settings">கணினி அமைப்புகள்</string>
+    <string name="language">Language / மொழி</string>
+    <string name="security_settings">பாதுகாப்பு</string>
+    <string name="change_pin">PIN-ஐ மாற்று</string>
+    <string name="change_pin_desc">உங்கள் உள்நுழைவு PIN-ஐ மாற்றவும்</string>
+    <string name="data_management">தரவு மேலாண்மை</string>
+    <string name="backup_db">Google Drive-ல் காப்பு பிரதி எடு</string>
+    <string name="backup_db_desc">உங்கள் தரவை பாதுகாப்பாக சேமிக்கவும்</string>
+    <string name="restore_db">காப்பு பிரதியிலிருந்து மீட்டெடு</string>
+    <string name="restore_db_desc">பழைய தரவை மீண்டும் பெறவும்</string>
+    <string name="export_csv">CSV ஆக ஏற்றுமதி செய்</string>
+    <string name="export_csv_desc">Excel-க்கான அனைத்து தரவையும் பதிவிறக்கு</string>
+</resources>

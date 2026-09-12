@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand Colors (Maroon Palette) -->
+    <color name="primary">#6B1E1E</color>
+    <color name="primaryDark">#4A1414</color>
+    <color name="accent">#D4AF37</color> <!-- Gold -->
+    
+    <!-- Status Colors -->
+    <color name="statusPaid">#388E3C</color> <!-- Green -->
+    <color name="statusDue">#F57C00</color> <!-- Amber -->
+    <color name="statusOverdue">#D32F2F</color> <!-- Red -->
+    <color name="statusUpcoming">#757575</color> <!-- Gray -->
+
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="background">#FAFAFA</color>
+</resources>

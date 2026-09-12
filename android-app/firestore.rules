@@ -1,0 +1,35 @@
+// Deploy these rules from Firebase Console, or with `firebase deploy --only firestore:rules` after firebase.json is configured.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /agents/{agentId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /chitGroups/{groupId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /members/{memberId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /chitMemberships/{membershipId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /installments/{installmentId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /collections/{collectionId} {
+      allow read: if true;
+      allow write: if true;
+    }
+  }
+}

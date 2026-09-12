@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:padding="8dp"
+    android:gravity="center_vertical"
+    android:background="?attr/selectableItemBackground">
+    
+    <TextView
+        android:id="@+id/tvInstallmentNo"
+        android:layout_width="40dp"
+        android:layout_height="wrap_content"
+        android:text="1"
+        android:textColor="@color/black"
+        android:textStyle="bold" />
+        
+    <TextView
+        android:id="@+id/tvBaseAmount"
+        android:layout_width="0dp"
+        android:layout_weight="1"
+        android:layout_height="wrap_content"
+        android:text="25000"
+        android:textColor="@color/black"
+        android:textAlignment="viewEnd" />
+        
+    <TextView
+        android:id="@+id/tvKasaru"
+        android:layout_width="0dp"
+        android:layout_weight="1"
+        android:layout_height="wrap_content"
+        android:text="0"
+        android:textColor="@color/black"
+        android:textAlignment="viewEnd" />
+        
+    <TextView
+        android:id="@+id/tvPayout"
+        android:layout_width="0dp"
+        android:layout_weight="1"
+        android:layout_height="wrap_content"
+        android:text="25000"
+        android:textColor="@color/black"
+        android:textStyle="bold"
+        android:textAlignment="viewEnd" />
+        
+</LinearLayout>

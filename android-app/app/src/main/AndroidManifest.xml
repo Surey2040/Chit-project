@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.jothivel.chits">
+
+    <!-- Permissions required for syncing and API calls -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Permission for WhatsApp integration / Intent -->
+    <queries>
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
+    </queries>
+
+    <application
+        android:allowBackup="true"
+        android:hardwareAccelerated="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="false"
+        android:theme="@style/Theme.JothiVelChits">
+        
+        <activity
+            android:name=".ui.auth.LoginActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        
+        <activity android:name=".ui.dashboard.DashboardActivity" />
+        <activity
+            android:name=".ui.MainHostActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden" />
+        <activity android:name=".ui.groups.GroupListActivity" />
+        <activity android:name=".ui.groups.GroupDetailActivity" />
+        <activity android:name=".ui.groups.AddGroupActivity" />
+        <activity android:name=".ui.groups.AuctionEntryActivity" />
+        <activity android:name=".ui.groups.PayoutEntryActivity" />
+        <activity android:name=".ui.members.MemberListActivity" />
+        <activity android:name=".ui.members.AddMemberActivity" />
+        <activity android:name=".ui.members.MemberProfileActivity" />
+        <activity android:name=".ui.collections.CollectionEntryActivity" />
+        <activity android:name=".ui.ledger.LedgerActivity" />
+        <activity android:name=".ui.settings.SettingsActivity" />
+        <activity android:name=".ui.settings.CsvImportActivity" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/filepaths" />
+        </provider>
+    </application>
+
+</manifest>

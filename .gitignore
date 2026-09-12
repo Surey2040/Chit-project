@@ -1,0 +1,34 @@
+# Node
+backend/node_modules/
+npm-debug.log*
+
+# Backend runtime data / secrets
+backend/database.sqlite
+backend/.env
+backend/*.env
+.env
+.env.*
+
+# Android / Gradle build outputs
+android-app/build/
+android-app/app/build/
+android-app/.gradle/
+android-app/.gradle-home/
+android-app/.android-home/
+android-app/.artifacts/
+android-app/build_output.txt
+*.iml
+.idea/
+
+# Android secrets / signing
+android-app/local.properties
+android-app/app/google-services.json
+*.keystore
+*.jks
+
+# Legacy system analysis artifacts (binaries + old DB credentials, not project source)
+analysis/soft_archive/
+
+# OS
+Thumbs.db
+.DS_Store
