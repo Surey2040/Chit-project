@@ -9,10 +9,11 @@ const sequelize = new Sequelize({
 
 const User = sequelize.define('User', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  name: { type: DataTypes.STRING, allowNull: false },
   username: { type: DataTypes.STRING, allowNull: false, unique: true },
   phone: { type: DataTypes.STRING, allowNull: false, unique: true },
   passwordHash: { type: DataTypes.STRING, allowNull: false },
-  role: { type: DataTypes.ENUM('ADMIN', 'AGENT'), allowNull: false },
+  role: { type: DataTypes.ENUM('ADMIN', 'AGENT', 'MEMBER'), allowNull: false },
   photoUrl: { type: DataTypes.STRING },
   idProofUrl: { type: DataTypes.STRING },
   nomineeName: { type: DataTypes.STRING },
@@ -42,6 +43,10 @@ const Installment = sequelize.define('Installment', {
   auctionDate: { type: DataTypes.DATEONLY, defaultValue: null },
   status: { type: DataTypes.ENUM('UPCOMING', 'AUCTION_DONE', 'LOCKED'), defaultValue: 'UPCOMING' },
   lockedAt: { type: DataTypes.DATE, defaultValue: null }
+}, {
+  indexes: [
+    { unique: true, fields: ['groupId', 'installmentNo'] }
+  ]
 });
 
 const MemberSubscription = sequelize.define('MemberSubscription', {
@@ -49,6 +54,10 @@ const MemberSubscription = sequelize.define('MemberSubscription', {
   slotNo: { type: DataTypes.INTEGER, allowNull: false },
   hasWon: { type: DataTypes.BOOLEAN, defaultValue: false },
   wonInstallmentNo: { type: DataTypes.INTEGER, defaultValue: null }
+}, {
+  indexes: [
+    { unique: true, fields: ['groupId', 'slotNo'] }
+  ]
 });
 
 const Payment = sequelize.define('Payment', {
@@ -59,7 +68,11 @@ const Payment = sequelize.define('Payment', {
   mode: { type: DataTypes.ENUM('CASH', 'UPI', 'BANK_TRANSFER'), allowNull: false },
   referenceNo: { type: DataTypes.STRING },
   receiptNo: { type: DataTypes.STRING, unique: true },
-  paidAt: { type: DataTypes.DATE, allowNull: false }
+  paidAt: { type: DataTypes.DATE, allowNull: true }
+}, {
+  indexes: [
+    { unique: true, fields: ['installmentId', 'memberId'] }
+  ]
 });
 
 const Payout = sequelize.define('Payout', {

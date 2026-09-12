@@ -1,8 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const { ChitGroup, Installment, User, MemberSubscription, Payment } = require('../models');
+const { ChitGroup, Installment, User, MemberSubscription, Payment, sequelize } = require('../models');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const KasaruService = require('../services/kasaruService');
+const { sendWhatsAppMessage } = require('../services/notificationService');
+const { Op } = require('sequelize');
 
 // Apply authentication to all routes in this file
 router.use(authenticateToken);
@@ -166,68 +168,140 @@ router.get('/:id/installments/:no', async (req, res) => {
 
 // POST /groups/:id/installments/:no/auction (admin only)
 router.post('/:id/installments/:no/auction', requireRole(['ADMIN']), async (req, res) => {
+    const { winningMemberId, winningBid, auctionDate, commissionPercentage = 5.0 } = req.body;
+
+    if (typeof winningBid !== 'number' || !Number.isFinite(winningBid) || winningBid < 0) {
+        return res.status(400).json({ errorCode: 'VALIDATION_ERROR', message: 'Winning bid must be a non-negative number', field: 'winningBid' });
+    }
+    if (typeof commissionPercentage !== 'number' || commissionPercentage < 0 || commissionPercentage > 20) {
+        return res.status(400).json({ errorCode: 'VALIDATION_ERROR', message: 'Commission percentage must be between 0 and 20', field: 'commissionPercentage' });
+    }
+
+    const t = await sequelize.transaction();
     try {
-        const { winningMemberId, winningBid, auctionDate, commissionPercentage = 5.0 } = req.body;
-        
-        if (winningBid < 0) {
-            return res.status(400).json({ errorCode: 'VALIDATION_ERROR', message: 'Winning bid cannot be negative' });
+        const group = await ChitGroup.findByPk(req.params.id, { transaction: t, lock: t.LOCK.UPDATE });
+        if (!group) {
+            await t.rollback();
+            return res.status(404).json({ errorCode: 'NOT_FOUND', message: 'Group not found' });
+        }
+        if (group.status !== 'ACTIVE') {
+            await t.rollback();
+            return res.status(400).json({ errorCode: 'VALIDATION_ERROR', message: 'Auctions can only be run on an ACTIVE group' });
         }
 
         const inst = await Installment.findOne({
-            where: { groupId: req.params.id, installmentNo: req.params.no }
+            where: { groupId: group.id, installmentNo: req.params.no },
+            transaction: t,
+            lock: t.LOCK.UPDATE
         });
-        
-        if (!inst) return res.status(404).json({ errorCode: 'NOT_FOUND', message: 'Installment not found' });
-        
+        if (!inst) {
+            await t.rollback();
+            return res.status(404).json({ errorCode: 'NOT_FOUND', message: 'Installment not found' });
+        }
         if (inst.status === 'LOCKED' || inst.status === 'AUCTION_DONE') {
+            await t.rollback();
             return res.status(403).json({ errorCode: 'FORBIDDEN', message: `Installment #${inst.installmentNo} is already finalized and cannot be edited` });
         }
 
-        const group = await ChitGroup.findByPk(req.params.id);
-        
-        // Calculate Kasaru logic
-        const auctionResults = KasaruService.calculateAuction(
-            group.chitValue,
-            group.subscriberCount,
-            winningBid,
-            commissionPercentage
-        );
+        // Enforce chronological order: every earlier installment must already be LOCKED
+        const unfinishedPriorCount = await Installment.count({
+            where: { groupId: group.id, installmentNo: { [Op.lt]: inst.installmentNo }, status: { [Op.ne]: 'LOCKED' } },
+            transaction: t
+        });
+        if (unfinishedPriorCount > 0) {
+            await t.rollback();
+            return res.status(400).json({ errorCode: 'VALIDATION_ERROR', message: 'Earlier installments must be auctioned first' });
+        }
+
+        const winnerSubscription = await MemberSubscription.findOne({
+            where: { groupId: group.id, memberId: winningMemberId },
+            include: [{ model: User, attributes: { exclude: ['passwordHash'] } }],
+            transaction: t
+        });
+        if (!winnerSubscription) {
+            await t.rollback();
+            return res.status(400).json({ errorCode: 'VALIDATION_ERROR', message: 'Winning member is not a subscriber of this group', field: 'winningMemberId' });
+        }
+        if (winnerSubscription.hasWon) {
+            await t.rollback();
+            return res.status(400).json({ errorCode: 'VALIDATION_ERROR', message: 'This member has already won a previous auction', field: 'winningMemberId' });
+        }
+
+        if (winningBid > group.chitValue) {
+            await t.rollback();
+            return res.status(400).json({ errorCode: 'VALIDATION_ERROR', message: 'Winning bid cannot exceed the chit value', field: 'winningBid' });
+        }
+
+        // Calculate Kasaru logic (throws if winningBid is below the company commission)
+        let auctionResults;
+        try {
+            auctionResults = KasaruService.calculateAuction(
+                group.chitValue,
+                group.subscriberCount,
+                winningBid,
+                commissionPercentage
+            );
+        } catch (calcError) {
+            await t.rollback();
+            return res.status(400).json({ errorCode: 'VALIDATION_ERROR', message: calcError.message });
+        }
 
         inst.winningMemberId = winningMemberId;
         inst.kasaruAmount = auctionResults.kasaruPerMember;
         inst.payoutAmount = auctionResults.winnerPayout;
-        inst.auctionDate = auctionDate;
+        inst.companyCommission = auctionResults.companyCommission;
+        inst.auctionDate = auctionDate || new Date();
         inst.status = 'LOCKED';
         inst.lockedAt = new Date();
-        
-        await inst.save();
+        await inst.save({ transaction: t });
 
-        // Update the member's subscription status
         await MemberSubscription.update(
             { hasWon: true, wonInstallmentNo: inst.installmentNo },
-            { where: { groupId: group.id, memberId: winningMemberId } }
+            { where: { groupId: group.id, memberId: winningMemberId }, transaction: t }
         );
 
-        // Auto-generate Payment records for all members for this installment
-        const allMembers = await MemberSubscription.findAll({ where: { groupId: group.id } });
+        // Create the DUE payment record every subscriber now owes for this installment
+        const allMembers = await MemberSubscription.findAll({
+            where: { groupId: group.id },
+            include: [{ model: User, attributes: { exclude: ['passwordHash'] } }],
+            transaction: t
+        });
         const paymentsToCreate = allMembers.map(m => ({
             installmentId: inst.id,
             memberId: m.memberId,
             amountPaid: 0,
             amountDue: auctionResults.nextMonthDue,
             status: 'DUE',
-            mode: 'CASH', // Default, to be updated on collection
-            paidAt: new Date() // Temp, to be null ideally but model says allowNull: false. Wait, paidAt is allowNull: false, which is wrong for DUE status. 
+            mode: 'CASH',
+            paidAt: null
         }));
-        
-        // Let's fix Payment creation - we can't create them immediately if paidAt is allowNull: false in model.
-        // Actually, let's just return the installment for now. Payment logic will be in collections phase.
+        await Payment.bulkCreate(paymentsToCreate, { transaction: t });
+
+        await t.commit();
+
+        // Fire-and-forget notifications after the transaction is safely committed;
+        // a notification failure must never roll back or fail an already-saved auction result.
+        const dividendPool = auctionResults.totalKasaru;
+        const dividend = auctionResults.kasaruPerMember;
+        for (const sub of allMembers) {
+            if (sub.User && sub.User.phone) {
+                const isWinner = sub.User.id === winningMemberId;
+                let msg = `*Jothi Vel Chits Auction Update*\nGroup: ${group.registerNo} | Installment: #${inst.installmentNo}\n\n`;
+                if (isWinner) {
+                    msg += `Congratulations ${sub.User.name}! You have won the auction with a discount (Kasaru) of Rs. ${winningBid / 100}.\nYour payout will be Rs. ${auctionResults.winnerPayout / 100}.`;
+                } else {
+                    msg += `The auction was won by ${winnerSubscription.User.name} for a discount of Rs. ${winningBid / 100}.\nYour dividend is Rs. ${dividend / 100}.\nNext due: Rs. ${auctionResults.nextMonthDue / 100}.`;
+                }
+                sendWhatsAppMessage(sub.User.phone, msg).catch(() => {});
+            }
+        }
 
         res.json({
             installment: inst,
             calculations: auctionResults
         });
     } catch (error) {
+        await t.rollback();
         res.status(500).json({ errorCode: 'SERVER_ERROR', message: error.message });
     }
 });
@@ -237,7 +311,7 @@ router.get('/:id/members', async (req, res) => {
     try {
         const members = await MemberSubscription.findAll({
             where: { groupId: req.params.id },
-            include: [{ model: User }]
+            include: [{ model: User, attributes: { exclude: ['passwordHash'] } }]
         });
         res.json(members);
     } catch (error) {
@@ -251,16 +325,31 @@ router.post('/:id/members', requireRole(['ADMIN']), async (req, res) => {
         const { memberId, slotNo } = req.body;
         const groupId = req.params.id;
 
-        // Verify slot is within bounds
         const group = await ChitGroup.findByPk(groupId);
-        if (slotNo < 1 || slotNo > group.durationMonths) {
-            return res.status(400).json({ errorCode: 'VALIDATION_ERROR', message: 'Invalid slot number' });
+        if (!group) {
+            return res.status(404).json({ errorCode: 'NOT_FOUND', message: 'Group not found' });
         }
 
-        // Verify slot unique constraint
+        if (group.status !== 'DRAFT') {
+            return res.status(400).json({
+                errorCode: 'VALIDATION_ERROR',
+                message: 'Members can only be added while the group is in DRAFT status'
+            });
+        }
+
+        const member = await User.findOne({ where: { id: memberId, role: 'MEMBER' } });
+        if (!member) {
+            return res.status(404).json({ errorCode: 'NOT_FOUND', message: 'Member not found', field: 'memberId' });
+        }
+
+        if (!Number.isInteger(slotNo) || slotNo < 1 || slotNo > group.durationMonths) {
+            return res.status(400).json({ errorCode: 'VALIDATION_ERROR', message: 'Invalid slot number', field: 'slotNo' });
+        }
+
+        // Verify slot unique constraint (also enforced by a DB unique index as a race-condition backstop)
         const existingSlot = await MemberSubscription.findOne({ where: { groupId, slotNo } });
         if (existingSlot) {
-            return res.status(400).json({ errorCode: 'VALIDATION_ERROR', message: 'Slot already taken' });
+            return res.status(400).json({ errorCode: 'VALIDATION_ERROR', message: 'Slot already taken', field: 'slotNo' });
         }
 
         const subscription = await MemberSubscription.create({
@@ -271,6 +360,9 @@ router.post('/:id/members', requireRole(['ADMIN']), async (req, res) => {
 
         res.status(201).json(subscription);
     } catch (error) {
+        if (error.name === 'SequelizeUniqueConstraintError') {
+            return res.status(400).json({ errorCode: 'VALIDATION_ERROR', message: 'Slot already taken', field: 'slotNo' });
+        }
         res.status(500).json({ errorCode: 'SERVER_ERROR', message: error.message });
     }
 });

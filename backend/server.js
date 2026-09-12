@@ -5,7 +5,19 @@ const { sequelize } = require('./src/models');
 
 const app = express();
 
-app.use(cors());
+const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+
+if (allowedOrigins.length === 0 && process.env.NODE_ENV === 'production') {
+  console.error('FATAL ERROR: CORS_ALLOWED_ORIGINS must be set in production.');
+  process.exit(1);
+}
+
+app.use(cors({
+  origin: allowedOrigins.length > 0 ? allowedOrigins : true // unrestricted only outside production
+}));
 app.use(express.json());
 
 // Routes
@@ -15,7 +27,6 @@ app.use('/members', require('./src/routes/members'));
 app.use('/payments', require('./src/routes/payments'));
 app.use('/reports', require('./src/routes/reports'));
 app.use('/payouts', require('./src/routes/payouts'));
-app.use('/installments', require('./src/routes/auctions')); // For auction logic
 
 const PORT = process.env.PORT || 3000;
 

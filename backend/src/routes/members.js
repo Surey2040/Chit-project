@@ -3,13 +3,17 @@ const router = express.Router();
 const { User } = require('../models');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 
 router.use(authenticateToken);
 
 // GET /members
 router.get('/', async (req, res) => {
     try {
-        const members = await User.findAll({ where: { role: 'MEMBER' } });
+        const members = await User.findAll({
+            where: { role: 'MEMBER' },
+            attributes: { exclude: ['passwordHash'] }
+        });
         res.json(members);
     } catch (error) {
         res.status(500).json({ errorCode: 'SERVER_ERROR', message: error.message });
@@ -20,13 +24,24 @@ router.get('/', async (req, res) => {
 router.post('/', requireRole(['ADMIN']), async (req, res) => {
     try {
         const { name, phone, nomineeName, nomineePhone, photoUrl, idProofUrl } = req.body;
-        
-        // Generate a random PIN or default password (in real app, send OTP)
-        const defaultPassword = 'member123';
-        const passwordHash = await bcrypt.hash(defaultPassword, 10);
+
+        if (!name || !phone) {
+            return res.status(400).json({
+                errorCode: 'VALIDATION_ERROR',
+                message: 'Name and phone are required',
+                field: !name ? 'name' : 'phone'
+            });
+        }
+
+        // Members are customer records, not login accounts in the approved flow.
+        // Derive a unique, non-guessable username/password so the User row satisfies
+        // the shared login-account schema without creating an actual usable login.
+        const username = `member_${phone}`;
+        const passwordHash = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10);
 
         const newMember = await User.create({
             name,
+            username,
             phone,
             passwordHash,
             role: 'MEMBER',
