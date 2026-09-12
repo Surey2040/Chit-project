@@ -426,13 +426,13 @@ fun AgentPinLoginScreen(
 
         OutlinedTextField(
             value = phone,
-            onValueChange = { if (it.length <= 10 && it.all(Char::isDigit)) { phone = it; isError = false } },
+            onValueChange = {},
+            readOnly = true,
             label = { Text("Mobile Number", color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             enabled = !isLoading,
             textStyle = LocalTextStyle.current.copy(color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
             shape = RoundedCornerShape(12.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = AccentGold.copy(alpha = 0.8f),
@@ -457,26 +457,36 @@ fun AgentPinLoginScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
 
+        // Same keypad drives both fields, one after the other - the phone number never opens
+        // the system keyboard (the field above is read-only), so there's nothing to scroll to.
         NumberPad(
             onNumberClick = { digit ->
-                if (pin.length < 4) {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                if (phone.length < 10) {
+                    phone += digit.toString()
+                    isError = false
+                } else if (pin.length < 4) {
                     pin += digit.toString()
-                    if (pin.length == 4 && phone.length == 10) viewModel.login(phone, pin)
+                    if (pin.length == 4) viewModel.login(phone, pin)
                 }
             },
             onDeleteClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 if (pin.isNotEmpty()) {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     pin = pin.dropLast(1)
+                } else if (phone.isNotEmpty()) {
+                    phone = phone.dropLast(1)
                 }
             },
-            enabled = !isLoading && pin.length < 4 && phone.length == 10
+            enabled = !isLoading
         )
 
-        if (phone.length in 1..9) {
+        if (phone.length in 0..9) {
             Spacer(modifier = Modifier.height(10.dp))
             Text("Enter your full 10-digit mobile number", color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp)
+        } else if (pin.isEmpty()) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Text("Now enter your 4-digit PIN", color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp)
         }
 
         if (isLoading) {
