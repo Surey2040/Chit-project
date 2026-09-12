@@ -148,6 +148,18 @@ fun AgentMyChitsScreen(onOpenGroup: (groupId: String, label: String) -> Unit) {
             )
         }
         item {
+            Button(
+                onClick = { scope.launch { refreshData() } },
+                modifier = Modifier.fillMaxWidth().height(46.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaroonPrimary),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Default.Sync, null, modifier = Modifier.size(17.dp))
+                Spacer(Modifier.width(7.dp))
+                Text("Sync Data from Cloud")
+            }
+        }
+        item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AgentStat("Today", money(todayTotal / 100), "$todayCount receipts", AccentGreen, Modifier.weight(1f))
                 AgentStat("Pending Sync", AgentCollectionSync.pendingCount(context).toString(), "offline entries", AccentGold, Modifier.weight(1f))

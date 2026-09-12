@@ -21,7 +21,11 @@ data class AgentCollectionDoc(
     val receiptNo: String,
     val notes: String,
     val businessDate: String,
-    val status: String
+    val status: String,
+    // true when the caller (the admin's own Collect screen) already applied this to its own
+    // Room DB directly - FirebaseSyncService should not re-apply it. Agent collections leave
+    // this false so the admin's listener picks them up and mirrors them in.
+    val syncedToAdmin: Boolean = false
 )
 
 /**
@@ -94,7 +98,7 @@ object AgentCollectionSync {
         FirestoreSchema.Collection.BUSINESS_DATE to doc.businessDate,
         FirestoreSchema.Collection.TIMESTAMP to FieldValue.serverTimestamp(),
         FirestoreSchema.Collection.STATUS to doc.status,
-        FirestoreSchema.Collection.SYNCED_TO_ADMIN to false,
+        FirestoreSchema.Collection.SYNCED_TO_ADMIN to doc.syncedToAdmin,
         FirestoreSchema.Collection.REQUEST_ID to doc.requestId
     )
 
@@ -118,7 +122,8 @@ object AgentCollectionSync {
                     receiptNo = o.getString("receiptNo"),
                     notes = o.optString("notes"),
                     businessDate = o.getString("businessDate"),
-                    status = o.getString("status")
+                    status = o.getString("status"),
+                    syncedToAdmin = o.optBoolean("syncedToAdmin", false)
                 )
             }
         }.getOrDefault(emptyList())
@@ -142,6 +147,7 @@ object AgentCollectionSync {
                 put("notes", doc.notes)
                 put("businessDate", doc.businessDate)
                 put("status", doc.status)
+                put("syncedToAdmin", doc.syncedToAdmin)
             })
         }
         prefs.edit().putString(KEY_QUEUE, array.toString()).apply()

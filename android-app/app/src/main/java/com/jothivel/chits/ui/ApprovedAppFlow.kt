@@ -1002,28 +1002,33 @@ private fun CollectionScreen(initialCustomer: String, initialChit: String, onBac
                 savedReceipt = receipt
                 dueAmountPaise = withContext(Dispatchers.IO) { CollectionService.calculateDuePaise(AppDatabase.getDatabase(context), member.id, group.id) }
                 amount = if (dueAmountPaise > 0) ((dueAmountPaise + 99) / 100).toString() else ""
-                if (isAgentMode) {
-                    withContext(Dispatchers.IO) {
-                        com.jothivel.chits.data.firebase.AgentCollectionSync.push(
-                            context,
-                            com.jothivel.chits.data.firebase.AgentCollectionDoc(
-                                requestId = requestId,
-                                agentId = agentPrefs.getAgentId(),
-                                agentName = agentPrefs.getAgentName(),
-                                memberId = member.id,
-                                memberName = member.name,
-                                groupId = group.id,
-                                chitNo = group.registerNo ?: group.id,
-                                amountPaise = receipt.amountPaise,
-                                mode = receipt.mode,
-                                referenceNo = receipt.referenceNo,
-                                receiptNo = receipt.receiptNo,
-                                notes = notes,
-                                businessDate = receipt.businessDate,
-                                status = "PAID"
-                            )
+                // Back up every collection to Firestore - not just agent-collected ones - so
+                // "Restore Data from Cloud" can recover full payment history after an
+                // uninstall/reinstall, not just chit/member structure. Admin-recorded
+                // collections are already in this device's own Room (written above), so they're
+                // tagged syncedToAdmin=true - FirebaseSyncService must not re-apply them; agent
+                // collections leave it false so the admin's listener mirrors them in as before.
+                withContext(Dispatchers.IO) {
+                    com.jothivel.chits.data.firebase.AgentCollectionSync.push(
+                        context,
+                        com.jothivel.chits.data.firebase.AgentCollectionDoc(
+                            requestId = requestId,
+                            agentId = if (isAgentMode) agentPrefs.getAgentId() else "",
+                            agentName = if (isAgentMode) agentPrefs.getAgentName() else "Admin",
+                            memberId = member.id,
+                            memberName = member.name,
+                            groupId = group.id,
+                            chitNo = group.registerNo ?: group.id,
+                            amountPaise = receipt.amountPaise,
+                            mode = receipt.mode,
+                            referenceNo = receipt.referenceNo,
+                            receiptNo = receipt.receiptNo,
+                            notes = notes,
+                            businessDate = receipt.businessDate,
+                            status = "PAID",
+                            syncedToAdmin = !isAgentMode
                         )
-                    }
+                    )
                 }
             }.onFailure { error = it.message ?: "Collection could not be saved" }
         }

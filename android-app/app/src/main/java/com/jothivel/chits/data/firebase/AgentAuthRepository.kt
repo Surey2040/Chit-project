@@ -83,6 +83,18 @@ object AgentAuthRepository {
         val firestore = FirebaseSetup.firestoreIfSignedIn(context)
             ?: return Result.failure(IllegalStateException("Firebase not configured. Add app/google-services.json first."))
         return try {
+            // A phone number must map to exactly one agent - without this check, creating a
+            // second agent with the same phone silently succeeds, and login (which queries
+            // by phone and takes the first match) can then pick the wrong document, making
+            // login fail unpredictably even with the correct PIN.
+            val existing = firestore.collection(FirestoreSchema.AGENTS)
+                .whereEqualTo(FirestoreSchema.Agent.PHONE, phone)
+                .limit(1)
+                .get()
+                .await()
+            if (!existing.isEmpty) {
+                return Result.failure(IllegalStateException("A labour account with this phone number already exists."))
+            }
             val data = hashMapOf(
                 FirestoreSchema.Agent.NAME to name,
                 FirestoreSchema.Agent.PHONE to phone,
@@ -112,6 +124,17 @@ object AgentAuthRepository {
 
     suspend fun setAssignedGroups(context: Context, agentId: String, groupIds: List<String>): Result<Unit> =
         update(context, agentId, mapOf(FirestoreSchema.Agent.ASSIGNED_GROUPS to groupIds))
+
+    suspend fun deleteAgent(context: Context, agentId: String): Result<Unit> {
+        val firestore = FirebaseSetup.firestoreIfSignedIn(context)
+            ?: return Result.failure(IllegalStateException("Firebase not configured."))
+        return try {
+            firestore.collection(FirestoreSchema.AGENTS).document(agentId).delete().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 
     private suspend fun update(context: Context, agentId: String, fields: Map<String, Any>): Result<Unit> {
         val firestore = FirebaseSetup.firestoreIfSignedIn(context)

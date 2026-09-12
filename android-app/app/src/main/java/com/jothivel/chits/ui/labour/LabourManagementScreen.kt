@@ -24,7 +24,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.LockReset
 import androidx.compose.material.icons.filled.PersonOff
@@ -83,6 +85,7 @@ fun LabourManagementScreen(onBack: () -> Unit) {
     var showAdd by remember { mutableStateOf(false) }
     var resetAgent by remember { mutableStateOf<AgentSummary?>(null) }
     var assignAgent by remember { mutableStateOf<AgentSummary?>(null) }
+    var deleteAgent by remember { mutableStateOf<AgentSummary?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     val firebaseReady = remember(refreshKey) { FirebaseSetup.firestoreOrNull(context) != null }
@@ -115,9 +118,11 @@ fun LabourManagementScreen(onBack: () -> Unit) {
                         onClick = {
                             scope.launch {
                                 val result = withContext(Dispatchers.IO) { FirestoreDataSync.syncAllToCloud(context) }
+                                val flushed = withContext(Dispatchers.IO) { com.jothivel.chits.data.firebase.AgentCollectionSync.flushPending(context) }
                                 result.onSuccess {
                                     errorMessage = null
-                                    Toast.makeText(context, "Synced ${it.groups} chits, ${it.members} members", Toast.LENGTH_LONG).show()
+                                    val suffix = if (flushed > 0) " • $flushed queued collections sent" else ""
+                                    Toast.makeText(context, "Synced ${it.groups} chits, ${it.members} members$suffix", Toast.LENGTH_LONG).show()
                                 }.onFailure {
                                     errorMessage = it.message ?: "Sync failed"
                                     Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
@@ -133,6 +138,30 @@ fun LabourManagementScreen(onBack: () -> Unit) {
                         Text("Sync Data to Cloud")
                     }
                 }
+                item {
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                val result = withContext(Dispatchers.IO) { FirestoreDataSync.restoreAllFromCloud(context) }
+                                result.onSuccess {
+                                    errorMessage = null
+                                    refreshKey++
+                                    Toast.makeText(context, "Restored ${it.groups} chits, ${it.members} members, ${it.collections} payments from cloud", Toast.LENGTH_LONG).show()
+                                }.onFailure {
+                                    errorMessage = it.message ?: "Restore failed"
+                                    Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(46.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaroonSurfaceLight, contentColor = MaroonPrimary),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.CloudDownload, null, modifier = Modifier.size(17.dp))
+                        Spacer(Modifier.width(7.dp))
+                        Text("Restore Data from Cloud")
+                    }
+                }
                 if (agents.isEmpty()) {
                     item { EmptyLabourState(if (firebaseReady) "No labour accounts yet" else "Firebase not ready") }
                 } else {
@@ -146,7 +175,8 @@ fun LabourManagementScreen(onBack: () -> Unit) {
                                 }
                             },
                             onResetPin = { resetAgent = agent },
-                            onAssign = { assignAgent = agent }
+                            onAssign = { assignAgent = agent },
+                            onDelete = { deleteAgent = agent }
                         )
                     }
                 }
@@ -218,6 +248,34 @@ fun LabourManagementScreen(onBack: () -> Unit) {
             }
         )
     }
+
+    deleteAgent?.let { agent ->
+        AlertDialog(
+            onDismissRequest = { deleteAgent = null },
+            title = { Text("Delete labour account?") },
+            text = { Text("This permanently removes ${agent.name.ifBlank { "this labour account" }} (${agent.phone}). They will no longer be able to log in. This cannot be undone.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) { AgentAuthRepository.deleteAgent(context, agent.id) }
+                            result.onSuccess {
+                                errorMessage = null
+                                deleteAgent = null
+                                refreshKey++
+                                Toast.makeText(context, "Labour account deleted", Toast.LENGTH_LONG).show()
+                            }.onFailure {
+                                errorMessage = it.message ?: "Delete failed"
+                                Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentRed)
+                ) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { deleteAgent = null }) { Text("Cancel") } }
+        )
+    }
 }
 
 @Composable
@@ -255,7 +313,7 @@ private fun FirebaseErrorBanner(message: String) {
 }
 
 @Composable
-private fun LabourAgentCard(agent: AgentSummary, onToggle: () -> Unit, onResetPin: () -> Unit, onAssign: () -> Unit) {
+private fun LabourAgentCard(agent: AgentSummary, onToggle: () -> Unit, onResetPin: () -> Unit, onAssign: () -> Unit, onDelete: () -> Unit) {
     val tint = if (agent.isActive) AccentGreen else AccentRed
     Surface(shape = RoundedCornerShape(16.dp), color = Color.White, border = BorderStroke(1.dp, DividerGray), shadowElevation = 1.dp) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -268,6 +326,9 @@ private fun LabourAgentCard(agent: AgentSummary, onToggle: () -> Unit, onResetPi
                     Text("${agent.phone} • ${agent.assignedGroups.size} chits", color = TextGray, fontSize = 10.sp)
                 }
                 Text(if (agent.isActive) "Active" else "Disconnected", color = tint, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                IconButton(onClick = onDelete, modifier = Modifier.size(30.dp)) {
+                    Icon(Icons.Default.Delete, "Delete", tint = AccentRed, modifier = Modifier.size(17.dp))
+                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                 LabourAction(if (agent.isActive) "Disconnect" else "Reconnect", Icons.Default.PersonOff, tint, Modifier.weight(1f), onToggle)
