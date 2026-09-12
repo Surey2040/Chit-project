@@ -106,14 +106,23 @@ private fun RoleModeToggle(selected: String, onSelect: (String) -> Unit) {
 
 @Composable
 private fun MarigoldGarlandHeader(modifier: Modifier = Modifier) {
-    Image(
-        painter = painterResource(id = R.drawable.marigold_garland),
-        contentDescription = null,
-        modifier = modifier
-            .fillMaxWidth()
-            .height(150.dp),
-        contentScale = ContentScale.FillHeight
-    )
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Image(
+            painter = painterResource(id = R.drawable.marigold_garland_left),
+            contentDescription = null,
+            modifier = Modifier.height(130.dp),
+            contentScale = ContentScale.FillHeight
+        )
+        Image(
+            painter = painterResource(id = R.drawable.marigold_garland_right),
+            contentDescription = null,
+            modifier = Modifier.height(130.dp),
+            contentScale = ContentScale.FillHeight
+        )
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
