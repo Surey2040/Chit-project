@@ -36,6 +36,24 @@ router.post('/', requireRole(['ADMIN']), async (req, res) => {
     try {
         const { registerNo, chitValue, durationMonths, subscriberCount, branch, startDate } = req.body;
 
+        if (!registerNo || typeof registerNo !== 'string') {
+            return res.status(400).json({ errorCode: 'VALIDATION_ERROR', message: 'registerNo is required', field: 'registerNo' });
+        }
+        if (!Number.isInteger(chitValue) || chitValue <= 0 || chitValue > Number.MAX_SAFE_INTEGER) {
+            return res.status(400).json({ errorCode: 'VALIDATION_ERROR', message: 'chitValue must be a positive integer (paise)', field: 'chitValue' });
+        }
+        if (!Number.isInteger(durationMonths) || durationMonths <= 0) {
+            return res.status(400).json({ errorCode: 'VALIDATION_ERROR', message: 'durationMonths must be a positive integer', field: 'durationMonths' });
+        }
+        if (!Number.isInteger(subscriberCount) || subscriberCount <= 0) {
+            return res.status(400).json({ errorCode: 'VALIDATION_ERROR', message: 'subscriberCount must be a positive integer', field: 'subscriberCount' });
+        }
+        if (!branch || typeof branch !== 'string') {
+            return res.status(400).json({ errorCode: 'VALIDATION_ERROR', message: 'branch is required', field: 'branch' });
+        }
+        if (!startDate || isNaN(Date.parse(startDate))) {
+            return res.status(400).json({ errorCode: 'VALIDATION_ERROR', message: 'startDate must be a valid date', field: 'startDate' });
+        }
         if (durationMonths !== subscriberCount) {
             return res.status(400).json({
                 errorCode: 'VALIDATION_ERROR',
@@ -54,14 +72,17 @@ router.post('/', requireRole(['ADMIN']), async (req, res) => {
             createdBy: req.user.id
         });
 
-        // Auto-generate the installment table on creation
-        const baseAmount = chitValue / durationMonths;
+        // Auto-generate the installment table on creation. chitValue may not divide evenly
+        // across installments (paise are integers) - floor each share and roll the leftover
+        // remainder into the final installment so the total collected exactly equals chitValue.
+        const baseAmount = Math.floor(chitValue / durationMonths);
+        const remainder = chitValue - baseAmount * durationMonths;
         const installments = [];
         for (let i = 1; i <= durationMonths; i++) {
             installments.push({
                 groupId: newGroup.id,
                 installmentNo: i,
-                baseAmount: baseAmount,
+                baseAmount: i === durationMonths ? baseAmount + remainder : baseAmount,
                 status: 'UPCOMING'
             });
         }

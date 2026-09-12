@@ -5,6 +5,7 @@ import retrofit2.converter.gson.GsonConverterFactory;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.logging.HttpLoggingInterceptor;
+import com.jothivel.chits.BuildConfig;
 import com.jothivel.chits.utils.TokenManager;
 import java.util.concurrent.TimeUnit;
 
@@ -27,9 +28,10 @@ public class ApiClient {
 
     public static Retrofit getClient(TokenManager tokenManager) {
         if (retrofit == null) {
-            // Logging interceptor – shows full request/response in Logcat
+            // Logging interceptor – full request/response bodies (including auth tokens)
+            // only in debug builds; release builds must never log this to Logcat.
             HttpLoggingInterceptor logging = new HttpLoggingInterceptor();
-            logging.setLevel(HttpLoggingInterceptor.Level.BODY);
+            logging.setLevel(BuildConfig.DEBUG ? HttpLoggingInterceptor.Level.BODY : HttpLoggingInterceptor.Level.NONE);
 
             TokenAuthenticator authenticator = new TokenAuthenticator(tokenManager);
 

@@ -4,7 +4,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { User } = require('../models');
-const { JWT_SECRET } = require('../middleware/auth');
+const { JWT_SECRET, REFRESH_TOKEN_SECRET } = require('../middleware/auth');
 
 // Simple in-memory brute-force guard for /auth/login.
 // Keyed by IP+phone so one bad actor can't lock out other users, and cleared on success.
@@ -88,7 +88,7 @@ router.post('/login', loginRateLimiter, async (req, res) => {
         };
         
         const accessToken = jwt.sign(payload, JWT_SECRET, { expiresIn: '15m' });
-        const refreshToken = jwt.sign(payload, JWT_SECRET, { expiresIn: '30d' });
+        const refreshToken = jwt.sign(payload, REFRESH_TOKEN_SECRET, { expiresIn: '30d' });
 
         res.json({
             accessToken,
@@ -119,7 +119,7 @@ router.post('/refresh-token', async (req, res) => {
             return res.status(401).json({ message: 'Refresh token required' });
         }
 
-        jwt.verify(refreshToken, JWT_SECRET, (err, decoded) => {
+        jwt.verify(refreshToken, REFRESH_TOKEN_SECRET, (err, decoded) => {
             if (err) {
                 return res.status(403).json({ message: 'Invalid or expired refresh token' });
             }

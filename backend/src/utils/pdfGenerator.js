@@ -13,9 +13,11 @@ function generateReceiptPdf(payment, member) {
         try {
             const doc = new PDFDocument({ margin: 50 });
             const fileName = `receipt_${payment.receiptNo}.pdf`;
-            const publicPath = path.join(__dirname, '..', '..', 'public', 'receipts', fileName);
+            const receiptsDir = path.join(__dirname, '..', '..', 'public', 'receipts');
+            const publicPath = path.join(receiptsDir, fileName);
             const relativeUrl = `/receipts/${fileName}`;
 
+            fs.mkdirSync(receiptsDir, { recursive: true });
             const writeStream = fs.createWriteStream(publicPath);
             doc.pipe(writeStream);
 

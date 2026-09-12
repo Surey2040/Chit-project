@@ -6,6 +6,14 @@ if (!JWT_SECRET) {
     process.exit(1);
 }
 
+// Refresh tokens use a separate secret so a leaked access-token secret alone can't be used
+// to mint long-lived (30 day) refresh tokens, and vice versa.
+const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET;
+if (!REFRESH_TOKEN_SECRET) {
+    console.error("FATAL ERROR: REFRESH_TOKEN_SECRET environment variable is not set.");
+    process.exit(1);
+}
+
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -47,5 +55,6 @@ const requireRole = (roles) => {
 module.exports = {
     authenticateToken,
     requireRole,
-    JWT_SECRET
+    JWT_SECRET,
+    REFRESH_TOKEN_SECRET
 };

@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"No tests specified yet\" && exit 0"
+    "test": "node tests/calculations.test.js && node test_kasaru.js"
   },
   "keywords": [],
   "author": "",

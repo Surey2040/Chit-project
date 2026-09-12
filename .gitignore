@@ -8,6 +8,10 @@ backend/.env
 backend/*.env
 .env
 .env.*
+backend/public/receipts/
+
+# Local build logs
+build_*.log
 
 # Android / Gradle build outputs
 android-app/build/
