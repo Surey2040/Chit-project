@@ -46,6 +46,10 @@ public class LoginViewModel extends AndroidViewModel {
         appPreferences.saveAdminProfile(name, phone, username);
         appPreferences.savePin(pin);
         appPreferences.setAdminSetup(true);
+        // Logging in as Admin must always win over any cached Labour/agent session from a
+        // previous login on this device - otherwise the app keeps routing to the agent flow
+        // even after a correct admin PIN, since getUserRole() only resets via this call.
+        appPreferences.clearAgentSession();
         loginSuccess.setValue(true);
     }
 
@@ -58,6 +62,9 @@ public class LoginViewModel extends AndroidViewModel {
         if (appPreferences.verifyPin(pin)) {
             // Automatically set admin setup to true so session skipping works
             appPreferences.setAdminSetup(true);
+            // See setupAdminProfile() above: clear any stale agent session so the app routes
+            // to the admin flow, not the last-used Labour session's role.
+            appPreferences.clearAgentSession();
             loginSuccess.setValue(true);
         } else {
             loginError.setValue("Invalid PIN");
