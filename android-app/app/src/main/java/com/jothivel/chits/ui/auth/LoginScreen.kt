@@ -105,7 +105,7 @@ private fun RoleModeToggle(selected: String, onSelect: (String) -> Unit) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 @Composable
-private fun MarigoldGarlandHeader(modifier: Modifier = Modifier) {
+private fun MarigoldGarlandHeader(modifier: Modifier = Modifier, height: androidx.compose.ui.unit.Dp = 100.dp) {
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
@@ -113,13 +113,13 @@ private fun MarigoldGarlandHeader(modifier: Modifier = Modifier) {
         Image(
             painter = painterResource(id = R.drawable.marigold_garland_left),
             contentDescription = null,
-            modifier = Modifier.height(130.dp),
+            modifier = Modifier.height(height),
             contentScale = ContentScale.FillHeight
         )
         Image(
             painter = painterResource(id = R.drawable.marigold_garland_right),
             contentDescription = null,
-            modifier = Modifier.height(130.dp),
+            modifier = Modifier.height(height),
             contentScale = ContentScale.FillHeight
         )
     }
@@ -396,33 +396,33 @@ fun AgentPinLoginScreen(
             .statusBarsPadding(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        MarigoldGarlandHeader()
+        MarigoldGarlandHeader(height = 80.dp)
 
-        Spacer(modifier = Modifier.height(if (isVisible) 24.dp else 24.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
             RoleModeToggle(selected = "LABOUR") { if (it == "ADMIN") onSwitchToAdmin() }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(stringResource(id = R.string.app_name), fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = Color.White, letterSpacing = 1.sp)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text("Field Collection Login", fontSize = 12.sp, color = Color.White.copy(alpha = 0.6f), letterSpacing = 0.5.sp)
+            Text(stringResource(id = R.string.app_name), fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = Color.White, letterSpacing = 1.sp)
+            Spacer(modifier = Modifier.height(3.dp))
+            Text("Field Collection Login", fontSize = 11.sp, color = Color.White.copy(alpha = 0.6f), letterSpacing = 0.5.sp)
         }
 
-        Spacer(modifier = Modifier.height(28.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
         Text(
             if (isError) (loginError ?: "Login failed. Try again.") else "Enter your mobile number & PIN",
-            fontSize = 13.sp,
+            fontSize = 12.sp,
             textAlign = TextAlign.Center,
             color = if (isError) PinDotError.copy(alpha = 0.95f) else Color.White.copy(alpha = 0.7f),
             fontWeight = if (isError) FontWeight.SemiBold else FontWeight.Normal
         )
 
-        Spacer(modifier = Modifier.height(18.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         OutlinedTextField(
             value = phone,
@@ -445,7 +445,7 @@ fun AgentPinLoginScreen(
             )
         )
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         Row(
             modifier = Modifier.offset(x = shakeOffset.dp),
@@ -455,7 +455,7 @@ fun AgentPinLoginScreen(
             repeat(4) { index -> PinDot(isFilled = index < pin.length, isError = isError, index = index, filledCount = pin.length) }
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         // Same keypad drives both fields, one after the other - the phone number never opens
         // the system keyboard (the field above is read-only), so there's nothing to scroll to.
@@ -490,11 +490,11 @@ fun AgentPinLoginScreen(
         }
 
         if (isLoading) {
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             CircularProgressIndicator(color = AccentGold, strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(12.dp))
     }
 }
 
@@ -567,7 +567,7 @@ fun NumberPad(
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         numbers.forEach { row ->
@@ -579,7 +579,7 @@ fun NumberPad(
                     when (num) {
                         -1 -> {
                             // Empty spacer
-                            Spacer(modifier = Modifier.size(72.dp))
+                            Spacer(modifier = Modifier.size(60.dp))
                         }
                         -2 -> {
                             // Delete button
@@ -591,7 +591,7 @@ fun NumberPad(
                                         Icons.Default.Backspace,
                                         contentDescription = "Delete",
                                         tint = Color.White.copy(alpha = 0.8f),
-                                        modifier = Modifier.size(22.dp)
+                                        modifier = Modifier.size(20.dp)
                                     )
                                 }
                             )
@@ -604,7 +604,7 @@ fun NumberPad(
                                 content = {
                                     Text(
                                         num.toString(),
-                                        fontSize = 24.sp,
+                                        fontSize = 21.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = Color.White
                                     )
@@ -648,7 +648,7 @@ fun NumberPadButton(
             }
         },
         modifier = Modifier
-            .size(72.dp)
+            .size(60.dp)
             .scale(scale),
         shape = CircleShape,
         color = Color.White.copy(alpha = bgAlpha),
