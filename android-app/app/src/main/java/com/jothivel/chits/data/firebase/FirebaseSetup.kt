@@ -3,6 +3,7 @@ package com.jothivel.chits.data.firebase
 import android.content.Context
 import android.util.Log
 import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 
 /**
@@ -49,6 +50,32 @@ object FirebaseSetup {
             FirebaseFirestore.getInstance()
         } catch (e: Exception) {
             Log.e(TAG, "FirebaseFirestore.getInstance() failed", e)
+            null
+        }
+    }
+
+    /**
+     * Firestore security rules require `request.auth != null` for every read/write - this
+     * signs the device in anonymously (once; cached across app restarts by the Firebase SDK)
+     * before handing back the Firestore instance, so callers never hit a PERMISSION_DENIED
+     * from an unauthenticated request. Every real read/write path in this feature should go
+     * through this instead of [firestoreOrNull].
+     *
+     * NOTE: anonymous auth only proves "some caller of the Firebase SDK", not a verified agent
+     * identity - it stops casual scraping/bots but not a determined attacker who reverse
+     * engineers the app. Real protection requires server-verified custom-claim auth (a Cloud
+     * Function that checks the PIN and mints a token) - deferred pending that decision.
+     */
+    suspend fun firestoreIfSignedIn(context: Context): FirebaseFirestore? {
+        val firestore = firestoreOrNull(context) ?: return null
+        return try {
+            val auth = FirebaseAuth.getInstance()
+            if (auth.currentUser == null) {
+                auth.signInAnonymously().await()
+            }
+            firestore
+        } catch (e: Exception) {
+            Log.e(TAG, "Anonymous sign-in failed", e)
             null
         }
     }

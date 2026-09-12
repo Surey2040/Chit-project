@@ -37,7 +37,7 @@ object AgentCollectionSync {
     private const val KEY_QUEUE = "queue"
 
     suspend fun push(context: Context, doc: AgentCollectionDoc): Boolean = withContext(Dispatchers.IO) {
-        val firestore = FirebaseSetup.firestoreOrNull(context)
+        val firestore = FirebaseSetup.firestoreIfSignedIn(context)
         if (firestore == null) {
             queue(context, doc)
             return@withContext false
@@ -55,7 +55,7 @@ object AgentCollectionSync {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val pending = readQueue(prefs)
         if (pending.isEmpty()) return@withContext 0
-        val firestore = FirebaseSetup.firestoreOrNull(context) ?: return@withContext 0
+        val firestore = FirebaseSetup.firestoreIfSignedIn(context) ?: return@withContext 0
         var flushed = 0
         val remaining = mutableListOf<AgentCollectionDoc>()
         pending.forEach { doc ->

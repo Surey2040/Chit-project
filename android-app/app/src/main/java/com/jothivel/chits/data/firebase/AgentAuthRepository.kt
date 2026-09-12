@@ -26,7 +26,7 @@ object AgentAuthRepository {
 
     suspend fun login(context: Context, phone: String, pin: String): AgentLoginResult {
         val prefs = AppPreferences(context)
-        val firestore = FirebaseSetup.firestoreOrNull(context) ?: return loginFromCache(prefs, phone, pin)
+        val firestore = FirebaseSetup.firestoreIfSignedIn(context) ?: return loginFromCache(prefs, phone, pin)
         return try {
             val snapshot = firestore.collection(FirestoreSchema.AGENTS)
                 .whereEqualTo(FirestoreSchema.Agent.PHONE, phone)
@@ -65,7 +65,7 @@ object AgentAuthRepository {
     // ── Admin-side management (Labour screen) ────────────────────────────
 
     suspend fun listAgents(context: Context): List<AgentSummary> {
-        val firestore = FirebaseSetup.firestoreOrNull(context) ?: return emptyList()
+        val firestore = FirebaseSetup.firestoreIfSignedIn(context) ?: return emptyList()
         val snapshot = firestore.collection(FirestoreSchema.AGENTS).get().await()
         return snapshot.documents.map { doc ->
             @Suppress("UNCHECKED_CAST")
@@ -80,7 +80,7 @@ object AgentAuthRepository {
     }
 
     suspend fun createAgent(context: Context, name: String, phone: String, pin: String): Result<String> {
-        val firestore = FirebaseSetup.firestoreOrNull(context)
+        val firestore = FirebaseSetup.firestoreIfSignedIn(context)
             ?: return Result.failure(IllegalStateException("Firebase not configured. Add app/google-services.json first."))
         return try {
             val data = hashMapOf(
@@ -114,7 +114,7 @@ object AgentAuthRepository {
         update(context, agentId, mapOf(FirestoreSchema.Agent.ASSIGNED_GROUPS to groupIds))
 
     private suspend fun update(context: Context, agentId: String, fields: Map<String, Any>): Result<Unit> {
-        val firestore = FirebaseSetup.firestoreOrNull(context)
+        val firestore = FirebaseSetup.firestoreIfSignedIn(context)
             ?: return Result.failure(IllegalStateException("Firebase not configured."))
         return try {
             firestore.collection(FirestoreSchema.AGENTS).document(agentId).update(fields).await()

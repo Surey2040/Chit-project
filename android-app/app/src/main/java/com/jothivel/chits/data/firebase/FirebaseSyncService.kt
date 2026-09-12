@@ -29,18 +29,24 @@ object FirebaseSyncService {
     fun start(context: Context) {
         if (registration != null) return
         val appContext = context.applicationContext
-        val firestore = FirebaseSetup.firestoreOrNull(appContext) ?: return
-        registration = firestore.collection(FirestoreSchema.COLLECTIONS)
-            .whereEqualTo(FirestoreSchema.Collection.SYNCED_TO_ADMIN, false)
-            .addSnapshotListener { snapshots, error ->
-                if (error != null || snapshots == null) {
-                    if (error != null) Log.e(TAG, "Listener error", error)
-                    return@addSnapshotListener
+        // Firestore rules require an authenticated caller, and starting the listener before
+        // sign-in completes would just fail every read with PERMISSION_DENIED - so sign in
+        // (async) first, then attach the listener.
+        scope.launch {
+            val firestore = FirebaseSetup.firestoreIfSignedIn(appContext) ?: return@launch
+            if (registration != null) return@launch
+            registration = firestore.collection(FirestoreSchema.COLLECTIONS)
+                .whereEqualTo(FirestoreSchema.Collection.SYNCED_TO_ADMIN, false)
+                .addSnapshotListener { snapshots, error ->
+                    if (error != null || snapshots == null) {
+                        if (error != null) Log.e(TAG, "Listener error", error)
+                        return@addSnapshotListener
+                    }
+                    snapshots.documentChanges
+                        .filter { it.type != DocumentChange.Type.REMOVED }
+                        .forEach { change -> scope.launch { applyToRoom(appContext, firestore, change.document) } }
                 }
-                snapshots.documentChanges
-                    .filter { it.type != DocumentChange.Type.REMOVED }
-                    .forEach { change -> scope.launch { applyToRoom(appContext, firestore, change.document) } }
-            }
+        }
     }
 
     fun stop() {

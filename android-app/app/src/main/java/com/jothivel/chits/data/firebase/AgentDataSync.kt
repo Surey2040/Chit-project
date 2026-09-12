@@ -22,7 +22,7 @@ object AgentDataSync {
         val prefs = AppPreferences(context)
         val assignedGroupIds = prefs.getAgentAssignedGroups()
         if (assignedGroupIds.isEmpty()) return@withContext Result.success(0)
-        val firestore = FirebaseSetup.firestoreOrNull(context)
+        val firestore = FirebaseSetup.firestoreIfSignedIn(context)
             ?: return@withContext Result.failure(IllegalStateException("No internet connection."))
         try {
             val db = AppDatabase.getDatabase(context)

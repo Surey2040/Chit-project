@@ -20,8 +20,8 @@ object FirestoreDataSync {
     data class SyncResult(val groups: Int, val members: Int, val memberships: Int, val installments: Int)
 
     suspend fun syncAllToCloud(context: Context): Result<SyncResult> {
-        val firestore = FirebaseSetup.firestoreOrNull(context)
-            ?: return Result.failure(IllegalStateException("Firebase not configured. Add app/google-services.json first."))
+        val firestore = FirebaseSetup.firestoreIfSignedIn(context)
+            ?: return Result.failure(IllegalStateException("Firebase not configured, or not signed in. Add app/google-services.json and check connectivity."))
         return try {
             val db = AppDatabase.getDatabase(context)
             val groups = db.groupDao().getAllGroupsSync().filter { it.status == "ACTIVE" }

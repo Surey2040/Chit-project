@@ -1,35 +1,40 @@
 // Deploy these rules from Firebase Console, or with `firebase deploy --only firestore:rules` after firebase.json is configured.
+//
+// INTERIM hardening (2026-09-11): every collection now requires a signed-in Firebase Auth
+// session (the app signs in anonymously via FirebaseSetup.firestoreIfSignedIn before any
+// read/write). This blocks unauthenticated scraping/bots hitting the Firestore REST API
+// directly, but anonymous auth is self-service - anyone who reverse engineers the app can
+// still sign in anonymously themselves and get the same access. It is NOT equivalent to
+// verifying which agent is calling. Real protection requires server-verified identity (e.g.
+// a Cloud Function that checks the PIN and mints a custom token with an agentId claim), with
+// rules scoped per-agent (e.g. assignedGroups-based reads, agents/{agentId} write restricted
+// to that agent's own doc). Do not treat this as sufficient once real customer financial data
+// is in this database.
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /agents/{agentId} {
-      allow read: if true;
-      allow write: if true;
+      allow read, write: if request.auth != null;
     }
 
     match /chitGroups/{groupId} {
-      allow read: if true;
-      allow write: if true;
+      allow read, write: if request.auth != null;
     }
 
     match /members/{memberId} {
-      allow read: if true;
-      allow write: if true;
+      allow read, write: if request.auth != null;
     }
 
     match /chitMemberships/{membershipId} {
-      allow read: if true;
-      allow write: if true;
+      allow read, write: if request.auth != null;
     }
 
     match /installments/{installmentId} {
-      allow read: if true;
-      allow write: if true;
+      allow read, write: if request.auth != null;
     }
 
     match /collections/{collectionId} {
-      allow read: if true;
-      allow write: if true;
+      allow read, write: if request.auth != null;
     }
   }
 }
