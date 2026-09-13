@@ -1,10 +1,16 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 
 package com.jothivel.chits.ui
 
 import android.content.Intent
 import android.content.res.Configuration
 import android.net.Uri
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -16,6 +22,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -40,6 +48,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jothivel.chits.ui.theme.*
@@ -56,6 +65,7 @@ import com.jothivel.chits.data.local.entity.ChitGroupEntity
 import com.jothivel.chits.data.local.entity.InstallmentEntity
 import com.jothivel.chits.data.local.entity.MemberEntity
 import com.jothivel.chits.data.local.entity.ChitMembershipEntity
+import com.jothivel.chits.data.local.entity.PaymentEntity
 import com.jothivel.chits.data.local.entity.CollectionReceiptEntity
 import com.jothivel.chits.data.local.entity.FinancialTransactionEntity
 import com.jothivel.chits.data.local.CollectionService
@@ -1817,7 +1827,7 @@ private fun TodayWorkScreen(onBack:()->Unit,onProfile:(String)->Unit,onCollect:(
         items(snapshot.dues.take(30),key={"${it.code}-${it.chit}"}){due-> Surface(Modifier.fillMaxWidth().clickable{onProfile(due.code)},shape=RoundedCornerShape(12.dp),color=Color.White,border=BorderStroke(1.dp,if(due.overdueDays>=90)AccentRed.copy(alpha=.35f) else DividerGray)){Row(Modifier.padding(10.dp),verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("${due.name} • ${due.chit}",fontSize=12.sp,fontWeight=FontWeight.SemiBold);Text("${money(due.pending)} pending • ${if(due.overdueDays>0)"${due.overdueDays}d overdue" else "Due today"}",fontSize=9.sp,color=if(due.overdueDays>0)AccentRed else AccentGold);if(due.recentContactAt>0)Text("Contacted ${relativeTime(due.recentContactAt)}",fontSize=8.sp,color=TextGray)};TextButton({onCollect(due.name,due.chit)}){Text("Collect",fontSize=9.sp)}}}}
         item{Text("Today completed",fontSize=14.sp,fontWeight=FontWeight.Bold,modifier=Modifier.padding(top=5.dp))}
         if(snapshot.completed.isEmpty()) item{ActionEmptyState("No collections completed yet","Saved collections will appear here",Icons.Default.ReceiptLong,null)}
-        items(snapshot.completed.take(15),key={it.id}){r->Surface(shape=RoundedCornerShape(10.dp),color=Color.White,border=BorderStroke(1.dp,DividerGray)){Row(Modifier.fillMaxWidth().padding(10.dp),horizontalArrangement=Arrangement.SpaceBetween){Text("${r.memberId} • ${r.groupId}",fontSize=10.sp);Text(money(r.amountPaidPaise/100),fontSize=11.sp,fontWeight=FontWeight.Bold,color=AccentGreen)}}}
+        items(snapshot.completed.take(15),key={it.id}){r->Surface(Modifier.fillMaxWidth().clickable{onProfile(r.memberId)},shape=RoundedCornerShape(10.dp),color=Color.White,border=BorderStroke(1.dp,DividerGray)){Row(Modifier.fillMaxWidth().padding(10.dp),horizontalArrangement=Arrangement.SpaceBetween){Text("${r.memberId} • ${r.groupId}",fontSize=10.sp);Text(money(r.amountPaidPaise/100),fontSize=11.sp,fontWeight=FontWeight.Bold,color=AccentGreen)}}}
     }}
 }
 
@@ -1831,23 +1841,134 @@ private fun CustomerProfileScreen(customerId:String,onBack:()->Unit,onCollect:(S
     val context=LocalContext.current
     val data by produceState(initialValue=ProfileSnapshot(),customerId){value=withContext(Dispatchers.IO){val db=AppDatabase.getDatabase(context);val member=db.memberDao().getAllMembersSync().firstOrNull{it.id==customerId};val links=db.membershipDao().getForMemberSync(customerId);ProfileSnapshot(member,links.mapNotNull{l->db.groupDao().getGroupByIdSync(l.groupId)?.let{Triple(it,l,CollectionService.calculateDuePaise(db,customerId,it.id)/100)}},db.paymentDao().getPaymentsByMemberSync(customerId),db.financialTransactionDao().getAllSync().filter{it.memberId==customerId})}}
     val member=data.member
-    Column(Modifier.fillMaxSize().background(MaroonBackground)){BrandTopBar("Customer Profile",back=onBack);if(member==null){ActionEmptyState("Customer not found","The customer may be inactive or removed",Icons.Default.PersonOff,onBack);return@Column};LazyColumn(contentPadding=PaddingValues(11.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
+    Column(Modifier.fillMaxSize().background(MaroonBackground)){
+        BrandTopBar("Customer Profile",back=onBack)
+        if(member==null){
+            ActionEmptyState("Customer not found","The customer may be inactive or removed",Icons.Default.PersonOff,onBack)
+        } else {
+            LazyColumn(contentPadding=PaddingValues(11.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
         item{Surface(shape=RoundedCornerShape(16.dp),color=Color.White,border=BorderStroke(1.dp,DividerGray),shadowElevation=1.dp){Column(Modifier.padding(14.dp)){Row(verticalAlignment=Alignment.CenterVertically){Box(Modifier.size(42.dp).background(MaroonSurfaceLight,CircleShape),contentAlignment=Alignment.Center){Text(member.name?.take(1)?.uppercase()?:"C",color=MaroonPrimary,fontWeight=FontWeight.Bold,fontSize=16.sp)};Column(Modifier.padding(start=10.dp).weight(1f)){Text(member.name ?: "Unnamed",fontSize=15.sp,fontWeight=FontWeight.Bold);Text("${member.phone.orEmpty()} • ${member.city.orEmpty()}",fontSize=9.sp,color=TextGray);Text(member.addressLine.orEmpty(),fontSize=8.sp,color=TextGray,maxLines=1)}};Divider(Modifier.padding(vertical=7.dp));Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly){TextButton({context.startActivity(Intent(Intent.ACTION_DIAL,Uri.parse("tel:${member.phone}")))}){Icon(Icons.Default.Call,null,modifier=Modifier.size(17.dp));Text("Call",fontSize=10.sp)};TextButton({context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://wa.me/91${member.phone.orEmpty().filter(Char::isDigit).takeLast(10)}")))}){Icon(Icons.Default.Chat,null,tint=AccentGreen,modifier=Modifier.size(17.dp));Text("WhatsApp",color=AccentGreen,fontSize=10.sp)}}}}}
         item{Text("Joined chits",fontSize=13.sp,fontWeight=FontWeight.Bold)}
         if(data.groups.isEmpty())item{ActionEmptyState("No active chit","Add this customer to a chit to start collection",Icons.Default.GroupAdd,null)}
         items(data.groups,key={it.first.id}){(g,l,due)->Surface(shape=RoundedCornerShape(12.dp),color=Color.White,border=BorderStroke(1.dp,DividerGray)){Column(Modifier.padding(10.dp)){Row{Column(Modifier.weight(1f)){Text("${g.registerNo} • ${g.name}",fontSize=12.sp,fontWeight=FontWeight.SemiBold);Text("Ticket ${l.ticketNo} • ${money(g.chitValue.toLong()/100)}",fontSize=9.sp,color=TextGray)};Text(money(due),color=if(due>0)AccentRed else AccentGreen,fontWeight=FontWeight.Bold,fontSize=12.sp)};Button({onCollect(member.name,g.registerNo?:g.id)},enabled=due>0,modifier=Modifier.fillMaxWidth().height(36.dp),colors=ButtonDefaults.buttonColors(containerColor=MaroonPrimary)){Text(if(due>0)"Collect" else "Paid up",fontSize=10.sp)}}}}
-        item{Text("Payment history",fontSize=13.sp,fontWeight=FontWeight.Bold)}
+        item{Text("Chit Passbook",fontSize=13.sp,fontWeight=FontWeight.Bold)}
         if(data.payments.isEmpty())item{ActionEmptyState("No payment history","Collections saved for this customer will appear here",Icons.Default.ReceiptLong,null)}
-        items(data.payments.take(30),key={it.id}){p->HistoryRow("Collection • ${p.groupId}",p.amountPaid,p.mode,p.paidAt,p.status)}
+        else item{ChitPassbook(member.name ?: "Unnamed", data.payments)}
         item{Text("Settlement & Delivery",fontSize=13.sp,fontWeight=FontWeight.Bold)}
         if(data.financial.isEmpty())item{ActionEmptyState("No settlement or delivery","Financial entries will appear here",Icons.Default.AccountBalanceWallet,null)}
         items(data.financial.take(30),key={it.id}){f->HistoryRow("${f.type.lowercase().replaceFirstChar(Char::uppercase)} • ${f.groupId}",f.amountPaise,f.mode,f.occurredAt,f.status)}
-    }}
+    }
+        }
+    }
 }
 
 @Composable private fun HistoryRow(title:String,paise:Long,mode:String,at:Long,status:String)=Surface(shape=RoundedCornerShape(10.dp),color=Color.White,border=BorderStroke(1.dp,DividerGray)){Row(Modifier.fillMaxWidth().padding(9.dp),verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(title,fontSize=10.sp,fontWeight=FontWeight.SemiBold);Text("$mode • ${SimpleDateFormat("dd MMM yy, hh:mm a",Locale.ENGLISH).format(Date(at))} • $status",fontSize=8.sp,color=TextGray)};Text(money(paise/100),fontSize=11.sp,fontWeight=FontWeight.Bold)}}
 
 @Composable private fun ActionEmptyState(title:String,subtitle:String,icon:ImageVector,onAction:(()->Unit)?){Surface(Modifier.fillMaxWidth(),shape=RoundedCornerShape(12.dp),color=Color.White,border=BorderStroke(1.dp,DividerGray)){Row(Modifier.padding(13.dp),verticalAlignment=Alignment.CenterVertically){Icon(icon,null,tint=AccentGreen,modifier=Modifier.size(25.dp));Column(Modifier.padding(start=9.dp).weight(1f)){Text(title,fontSize=11.sp,fontWeight=FontWeight.SemiBold);Text(subtitle,fontSize=9.sp,color=TextGray)};onAction?.let{TextButton(it){Text("Open",fontSize=9.sp)}}}}}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CHIT PASSBOOK — a customer's payment history rendered as a flip-through paper
+// passbook (the physical books this business's customers grew up using) instead
+// of a flat list, with a 3D page-turn swipe between pages.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+private val PassbookPaper = Color(0xFFFBF3E1)
+private val PassbookRule = Color(0xFFD8C9A3)
+private val PassbookInk = Color(0xFF3A2E22)
+
+@Composable
+private fun ChitPassbook(customerName: String, payments: List<PaymentEntity>) {
+    val rowsPerPage = 8
+    val sorted = remember(payments) { payments.sortedByDescending { it.paidAt } }
+    val pages = remember(sorted) { sorted.chunked(rowsPerPage) }
+    var pageIndex by remember(pages) { mutableIntStateOf(0) }
+    val current = pageIndex.coerceIn(0, (pages.size - 1).coerceAtLeast(0))
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        AnimatedContent(
+            targetState = current,
+            transitionSpec = {
+                if (targetState > initialState) {
+                    (slideInHorizontally { it } + fadeIn()) togetherWith (slideOutHorizontally { -it } + fadeOut())
+                } else {
+                    (slideInHorizontally { -it } + fadeIn()) togetherWith (slideOutHorizontally { it } + fadeOut())
+                }
+            },
+            label = "passbookPage"
+        ) { page ->
+            PassbookPage(customerName, pages[page], page + 1, pages.size, rowsPerPage)
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            IconButton(onClick = { pageIndex = (current - 1).coerceAtLeast(0) }, enabled = current > 0, modifier = Modifier.size(30.dp)) {
+                Icon(Icons.Default.ChevronLeft, "Previous page", tint = if (current > 0) MaroonPrimary else DividerGray)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
+                pages.indices.forEach { index ->
+                    Box(
+                        Modifier
+                            .size(if (index == current) 7.dp else 5.dp)
+                            .background(if (index == current) MaroonPrimary else DividerGray, CircleShape)
+                    )
+                }
+            }
+            IconButton(onClick = { pageIndex = (current + 1).coerceAtMost(pages.size - 1) }, enabled = current < pages.size - 1, modifier = Modifier.size(30.dp)) {
+                Icon(Icons.Default.ChevronRight, "Next page", tint = if (current < pages.size - 1) MaroonPrimary else DividerGray)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PassbookPage(customerName: String, rows: List<PaymentEntity>, pageNo: Int, pageCount: Int, rowsPerPage: Int) {
+    Surface(
+        shape = RoundedCornerShape(4.dp),
+        color = PassbookPaper,
+        shadowElevation = 4.dp,
+        border = BorderStroke(1.dp, PassbookRule)
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .drawBehind {
+                    // Red margin line, like a ruled ledger page
+                    drawLine(Color(0xFFB33), Offset(34f, 0f), Offset(34f, size.height), strokeWidth = 1.5f)
+                }
+                .padding(start = 14.dp, end = 12.dp, top = 12.dp, bottom = 10.dp)
+        ) {
+            Text("JOTHI VEL CHITS", color = MaroonPrimary, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            Text(customerName, color = PassbookInk, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(6.dp))
+            Row(Modifier.fillMaxWidth().drawBehind {
+                drawLine(PassbookRule, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 1.5f)
+            }.padding(bottom = 5.dp)) {
+                Text("DATE", color = PassbookInk.copy(alpha = .65f), fontSize = 8.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1.1f))
+                Text("MODE", color = PassbookInk.copy(alpha = .65f), fontSize = 8.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(0.8f))
+                Text("STATUS", color = PassbookInk.copy(alpha = .65f), fontSize = 8.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(0.9f))
+                Text("AMOUNT", color = PassbookInk.copy(alpha = .65f), fontSize = 8.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+            }
+            rows.forEach { p ->
+                Row(
+                    Modifier.fillMaxWidth().drawBehind {
+                        drawLine(PassbookRule.copy(alpha = .6f), Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 1.dp.toPx())
+                    }.padding(vertical = 7.dp)
+                ) {
+                    Text(SimpleDateFormat("dd-MMM-yy", Locale.ENGLISH).format(Date(p.paidAt)), color = PassbookInk, fontSize = 10.sp, modifier = Modifier.weight(1.1f))
+                    Text(p.mode, color = PassbookInk, fontSize = 10.sp, modifier = Modifier.weight(0.8f))
+                    Text(p.status, color = when (p.status) { "PAID", "ADVANCE" -> AccentGreen; "PARTIAL" -> AccentGold; else -> AccentRed }, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(0.9f))
+                    Text(money(p.amountPaid / 100), color = PassbookInk, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                }
+            }
+            repeat((rowsPerPage - rows.size).coerceAtLeast(0)) {
+                Spacer(Modifier.fillMaxWidth().height(24.dp).drawBehind {
+                    drawLine(PassbookRule.copy(alpha = .35f), Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 1.dp.toPx())
+                })
+            }
+            Spacer(Modifier.height(8.dp))
+            Text("Page $pageNo of $pageCount", color = PassbookInk.copy(alpha = .5f), fontSize = 8.sp, modifier = Modifier.align(Alignment.End))
+        }
+    }
+}
 
 @Composable
 private fun DailyClosingScreen(onBack:()->Unit){val context=LocalContext.current;val today=CollectionService.todayKey();val snapshot by produceState(initialValue=emptyMap<String,Long>(),context){value=withContext(Dispatchers.IO){val db=AppDatabase.getDatabase(context);val receipts=db.collectionReceiptDao().getRecentSync(Int.MAX_VALUE).filter{it.businessDate==today&&it.status=="SAVED"};val finance=db.financialTransactionDao().getAllSync().filter{it.status=="POSTED"&&SimpleDateFormat("yyyy-MM-dd",Locale.US).format(Date(it.occurredAt))==today};val dues=loadOperationalDues(db).filter{it.dueDate.equals(SimpleDateFormat("dd-MMM-yy",Locale.ENGLISH).format(Date()),true)}.sumOf{it.pending};mapOf("Cash" to receipts.filter{it.mode=="Cash"}.sumOf{it.amountPaidPaise}/100,"UPI" to receipts.filter{it.mode=="UPI"}.sumOf{it.amountPaidPaise}/100,"Bank" to receipts.filter{it.mode=="Bank"}.sumOf{it.amountPaidPaise}/100,"Settlement" to finance.filter{it.type=="SETTLEMENT"}.sumOf{it.amountPaise}/100,"Delivery" to finance.filter{it.type=="DELIVERY"}.sumOf{it.amountPaise}/100,"Due" to dues)}};val received=(snapshot["Cash"]?:0)+(snapshot["UPI"]?:0)+(snapshot["Bank"]?:0);val expected=received+(snapshot["Due"]?:0);val difference=received-expected;fun share(){val text="Jothi Vel Chits - Daily Closing ($today)\nCash: ${money(snapshot["Cash"]?:0)}\nUPI: ${money(snapshot["UPI"]?:0)}\nBank: ${money(snapshot["Bank"]?:0)}\nSettlement: ${money(snapshot["Settlement"]?:0)}\nDelivery: ${money(snapshot["Delivery"]?:0)}\nExpected: ${money(expected)}\nReceived: ${money(received)}\nDifference: ${money(difference)}";context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply{type="text/plain";putExtra(Intent.EXTRA_TEXT,text)},"Share closing summary"))};Column(Modifier.fillMaxSize().background(MaroonBackground)){BrandTopBar("Daily Closing",back=onBack,action=Icons.Default.Share,onAction=::share);LazyColumn(contentPadding=PaddingValues(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){item{Text(SimpleDateFormat("EEEE, dd MMM yyyy",Locale.ENGLISH).format(Date()),fontSize=11.sp,color=TextGray)};listOf("Cash" to AccentGreen,"UPI" to Color(0xFF285A9B),"Bank" to MaroonPrimary,"Settlement" to Color(0xFF285A9B),"Delivery" to AccentGreen).forEach{(key,color)->item{ClosingRow(key,snapshot[key]?:0,color)}};item{Divider()};item{ClosingRow("Expected",expected,Color.Black)};item{ClosingRow("Received",received,AccentGreen)};item{ClosingRow("Difference",difference,if(difference<0)AccentRed else AccentGreen)};item{Button(::share,Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=MaroonPrimary)){Icon(Icons.Default.Share,null);Spacer(Modifier.width(6.dp));Text("Share Closing Summary")}}}}}
