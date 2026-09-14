@@ -754,15 +754,14 @@ private fun LedgerScreenApproved(
     onBack: () -> Unit,
     onCollect: (String, String) -> Unit
 ) {
+    // The customer-search/consolidated-vs-detail ledger UI this screen originally had was never
+    // wired to real data (it rendered a hardcoded "Thilban / C-39" sample customer) and was
+    // superseded by ResizableLedgerSheet, the real Room-backed spreadsheet ledger, before ever
+    // shipping - removed rather than left as unreachable dead code behind an early return.
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     var showRotatePrompt by remember { mutableStateOf(true) }
-    if (isLandscape) {
-        ResizableLedgerSheet(onBack)
-        return
-    }
-    // Portrait also shows the same Room-backed sheet; rotation only expands the workspace.
     ResizableLedgerSheet(onBack)
-    if (showRotatePrompt) {
+    if (!isLandscape && showRotatePrompt) {
         AlertDialog(
             onDismissRequest = { showRotatePrompt = false },
             icon = { Icon(Icons.Default.ScreenRotation, null, tint = MaroonPrimary, modifier = Modifier.size(38.dp)) },
@@ -770,151 +769,6 @@ private fun LedgerScreenApproved(
             text = { Text("100 customer rows are loaded. Rotate to landscape to see more columns at once.") },
             confirmButton = { Button(onClick = { showRotatePrompt = false }, colors = ButtonDefaults.buttonColors(containerColor = MaroonPrimary)) { Text("View table") } }
         )
-    }
-    return
-    var query by remember { mutableStateOf("") }
-    var detailed by remember { mutableStateOf(false) }
-    var activeCustomer by remember(selectedCustomer) { mutableStateOf(selectedCustomer) }
-    var activeResultIndex by remember { mutableIntStateOf(0) }
-    val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
-    val context = LocalContext.current
-    val name = activeCustomer?.name ?: "Thilban"
-    val code = activeCustomer?.code ?: "C-39"
-    val phone = activeCustomer?.phone ?: "8220196686"
-    val area = activeCustomer?.area ?: "Manapparai"
-    val chit = activeCustomer?.chit ?: "Cits-39"
-    val chitValue = activeCustomer?.chitValue ?: 300000L
-    val collection = activeCustomer?.paid ?: 253650L
-    val settlement = if (activeCustomer == null) 253650L else activeCustomer!!.paid
-    val balance = collection - settlement
-    val delivery = 0L
-    val ledgerRows = remember { listOf("Jun 2024 (6/12)" to 13050L, "Jul 2024 (7/12)" to 10550L, "Aug 2024 (8/12)" to 10650L, "Sep 2024 (9/12)" to 10800L, "Oct 2024 (10/12)" to 10950L, "Nov 2024 (11/12)" to 11100L, "Dec 2024 (12/12)" to 11250L, "Jan 2025 (1/12)" to 11550L) }
-    val normalizedQuery = query.trim().lowercase()
-    val ledgerMatches = buildList {
-        if (normalizedQuery.isNotBlank()) {
-            val summaryText = "$name $code $phone $area $chit collection settlement balance delivery ${money(chitValue)}".lowercase()
-            if (summaryText.contains(normalizedQuery)) add(1)
-            ledgerRows.forEachIndexed { index, row ->
-                if ("${row.first} ${money(row.second)} collection settlement".lowercase().contains(normalizedQuery)) add(index + 4)
-            }
-        }
-    }
-    val activeLedgerTarget = ledgerMatches.getOrNull(activeResultIndex)
-
-    fun goToLedgerResult(direction: Int) {
-        if (ledgerMatches.isEmpty()) return
-        activeResultIndex = (activeResultIndex + direction + ledgerMatches.size) % ledgerMatches.size
-        scope.launch { listState.animateScrollToItem(ledgerMatches[activeResultIndex]) }
-    }
-
-    LaunchedEffect(query) {
-        activeResultIndex = 0
-        ledgerMatches.firstOrNull()?.let { listState.animateScrollToItem(it) }
-    }
-
-    fun shareStatement() {
-        val statement = "Jothi Vel Chits\nCustomer: $name ($code)\nPhone: $phone\nChit: $chit\nCollection: ${money(collection)}\nSettlement: ${money(settlement)}\nBalance: ${money(balance)}\nDelivery: ${money(delivery)}"
-        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_SUBJECT, "Jothi Vel Chits - $name Ledger")
-            putExtra(Intent.EXTRA_TEXT, statement)
-        }, "Share statement"))
-    }
-
-    Column(Modifier.fillMaxSize()) {
-        BrandTopBar("Ledger", onBack, Icons.Default.Share)
-        DetailFindToolbar(
-            query = query,
-            onQueryChange = { query = it },
-            placeholder = "Find customer, amount or month",
-            resultCount = ledgerMatches.size,
-            activeResultIndex = activeResultIndex.coerceAtMost((ledgerMatches.size - 1).coerceAtLeast(0)),
-            onPrevious = { goToLedgerResult(-1) },
-            onNext = { goToLedgerResult(1) },
-            onDownload = { shareStatement() },
-            modifier = Modifier.padding(horizontal = 11.dp, vertical = 8.dp)
-        )
-        LazyColumn(state = listState, contentPadding = PaddingValues(horizontal = 11.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { FilterChip(!detailed, { detailed = false }, { Text("Consolidated") }); FilterChip(detailed, { detailed = true }, { Text("Details") }) } }
-            item { CustomerSummaryCard(name, code, phone, area, chit, chitValue, collection, settlement, balance, delivery, activeLedgerTarget == 1, onCollect) }
-            item {
-                OutlinedButton(onClick = { shareStatement() }, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.IosShare, null, modifier = Modifier.size(17.dp)); Spacer(Modifier.width(7.dp)); Text("Export / Share Statement")
-                }
-            }
-            item { SectionTitle(if (detailed) "Monthly Transaction Details" else "Monthly Ledger") }
-            items(ledgerRows, key = { it.first }, contentType = { "ledger_month" }) { (month, amount) ->
-                val target = ledgerRows.indexOfFirst { it.first == month } + 4
-                if (detailed) DetailedInstallmentRow(month, amount, !month.startsWith("Jan"), activeLedgerTarget == target) else InstallmentRow(month, amount, !month.startsWith("Jan"), activeLedgerTarget == target)
-            }
-        }
-    }
-    if (showRotatePrompt) {
-        AlertDialog(
-            onDismissRequest = { showRotatePrompt = false },
-            icon = { Icon(Icons.Default.ScreenRotation, null, tint = MaroonPrimary, modifier = Modifier.size(42.dp)) },
-            title = { Text("Rotate for Ledger Sheet") },
-            text = { Text("For the full Excel-style ledger, rotate your phone to landscape. You can drag column lines to resize and scroll in both directions.") },
-            confirmButton = { Button(onClick = { showRotatePrompt = false }, colors = ButtonDefaults.buttonColors(containerColor = MaroonPrimary)) { Text("Got it") } },
-            dismissButton = { TextButton(onClick = { showRotatePrompt = false }) { Text("Continue portrait") } }
-        )
-    }
-}
-
-@Composable
-private fun CustomerSummaryCard(
-    name: String, code: String, phone: String, area: String, chit: String,
-    chitValue: Long, collection: Long, settlement: Long, balance: Long, delivery: Long,
-    highlighted: Boolean,
-    onCollect: (String, String) -> Unit
-) {
-    val cardColor by androidx.compose.animation.animateColorAsState(if (highlighted) Color(0xFFF1E8EA) else Color.White, label = "ledgerHighlight")
-    Surface(shape = RoundedCornerShape(16.dp), color = cardColor, border = BorderStroke(1.dp, if (highlighted) MaroonPrimary.copy(alpha = .45f) else DividerGray)) {
-        Column(Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(36.dp).background(MaroonLight, CircleShape), contentAlignment = Alignment.Center) { Text(name.take(1), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp) }
-                Column(Modifier.padding(start = 9.dp).weight(1f)) { Text("$name • $code", fontWeight = FontWeight.SemiBold, fontSize = 16.sp); Text("$phone • $area", color = TextGray, fontSize = 11.sp, maxLines = 1) }
-                AssistChip(onClick = {}, label = { Text("Active", color = AccentGreen) })
-            }
-            Spacer(Modifier.height(8.dp)); Text("$chit • Chit Value", fontSize = 10.sp); Text(money(chitValue), fontWeight = FontWeight.Bold, fontSize = 17.sp); Text("15 Jun 2024 – 15 Jan 2026", color = TextGray, fontSize = 10.sp)
-            Spacer(Modifier.height(12.dp)); Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                MiniMetric("Collection", money(collection), AccentGreen, Modifier.weight(1f)); MiniMetric("Settlement", money(settlement), AccentGreen, Modifier.weight(1f)); MiniMetric("Balance", money(balance), if (balance < 0) AccentRed else Color.Black, Modifier.weight(1f)); MiniMetric("Delivery", money(delivery), Color(0xFF285A9B), Modifier.weight(1f))
-            }
-            TextButton(onClick = { onCollect(name, chit) }, modifier = Modifier.align(Alignment.End)) { Icon(Icons.Default.Add, null); Text("Add collection") }
-        }
-    }
-}
-
-@Composable private fun MiniMetric(label: String, value: String, color: Color, modifier: Modifier) = Surface(modifier, shape = RoundedCornerShape(8.dp), color = MaroonBackground, border = BorderStroke(1.dp, DividerGray)) { Column(Modifier.padding(7.dp)) { Text(label, fontSize = 9.sp); Text(value, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = color, maxLines = 1) } }
-
-@Composable
-private fun InstallmentRow(month: String, amount: Long, paid: Boolean, highlighted: Boolean = false) {
-    val rowColor by androidx.compose.animation.animateColorAsState(if (highlighted) Color(0xFFE3E5E8) else Color.White, label = "installmentHighlight")
-    Row(Modifier.fillMaxWidth().background(rowColor, RoundedCornerShape(9.dp)).border(if (highlighted) 1.dp else 0.dp, MaroonPrimary.copy(alpha = .4f), RoundedCornerShape(9.dp)).padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(if (paid) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked, null, tint = if (paid) AccentGreen else TextLightGray)
-        Text(month, Modifier.padding(start = 8.dp).weight(1f), fontSize = 12.sp)
-        Column(horizontalAlignment = Alignment.End) { Text(money(amount), color = if (paid) AccentGreen else Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp); Text(if (paid) "Paid" else "Due", color = if (paid) TextGray else AccentRed, fontSize = 9.sp) }
-    }
-}
-
-@Composable
-private fun DetailedInstallmentRow(month: String, amount: Long, paid: Boolean, highlighted: Boolean = false) {
-    val rowColor by androidx.compose.animation.animateColorAsState(if (highlighted) Color(0xFFE3E5E8) else Color.White, label = "detailHighlight")
-    Surface(shape = RoundedCornerShape(9.dp), color = rowColor, border = BorderStroke(1.dp, if (highlighted) MaroonPrimary.copy(alpha = .45f) else DividerGray)) {
-        Column(Modifier.padding(10.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(month, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Text(if (paid) "Settled" else "Pending", color = if (paid) AccentGreen else AccentRed, fontSize = 10.sp)
-            }
-            Spacer(Modifier.height(6.dp))
-            Row {
-                MiniDue("Collection", if (paid) amount else 0, AccentGreen, Modifier.weight(1f))
-                MiniDue("Settlement", if (paid) amount else 0, Color(0xFF285A9B), Modifier.weight(1f))
-                MiniDue("Balance", if (paid) 0 else -amount, if (paid) Color.Black else AccentRed, Modifier.weight(1f))
-                MiniDue("Delivery", 0, Color.Black, Modifier.weight(1f))
-            }
-        }
     }
 }
 
