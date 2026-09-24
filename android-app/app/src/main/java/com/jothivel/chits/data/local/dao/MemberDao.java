@@ -59,4 +59,7 @@ public interface MemberDao {
 
     @Query("SELECT COUNT(*) FROM members WHERE selectedChitId = :chitId")
     LiveData<Integer> getMemberCountByChitId(String chitId);
+
+    @Query("DELETE FROM members")
+    void deleteAll();
 }

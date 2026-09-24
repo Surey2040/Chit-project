@@ -7,26 +7,17 @@ import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
-import com.jothivel.chits.data.remote.ApiClient;
-import com.jothivel.chits.data.remote.ApiService;
-import com.jothivel.chits.data.repository.AuthRepository;
-import com.jothivel.chits.utils.TokenManager;
-
 public class LoginViewModel extends AndroidViewModel {
 
-    private AuthRepository authRepository;
     private final MutableLiveData<Boolean> loginSuccess = new MutableLiveData<>();
     private final MutableLiveData<String> loginError = new MutableLiveData<>();
     private final MutableLiveData<Boolean> isLoading = new MutableLiveData<>(false);
 
-    private com.jothivel.chits.utils.AppPreferences appPreferences;
+    private final com.jothivel.chits.utils.AppPreferences appPreferences;
 
     public LoginViewModel(@NonNull Application application) {
         super(application);
-        TokenManager tokenManager = new TokenManager(application);
-        ApiService apiService = ApiClient.getClient(tokenManager).create(ApiService.class);
         appPreferences = new com.jothivel.chits.utils.AppPreferences(application);
-        authRepository = new AuthRepository(apiService, tokenManager, appPreferences);
     }
 
     public LiveData<Boolean> getLoginSuccess() { return loginSuccess; }
@@ -47,7 +38,7 @@ public class LoginViewModel extends AndroidViewModel {
         appPreferences.savePin(pin);
         appPreferences.setAdminSetup(true);
         // Logging in as Admin must always win over any cached Labour/agent session from a
-        // previous login on this device - otherwise the app keeps routing to the agent flow
+        // previous login on this device. Otherwise the app keeps routing to the agent flow
         // even after a correct admin PIN, since getUserRole() only resets via this call.
         appPreferences.clearAgentSession();
         loginSuccess.setValue(true);
@@ -59,7 +50,14 @@ public class LoginViewModel extends AndroidViewModel {
             return;
         }
 
+        String throttleMessage = appPreferences.adminPinThrottleMessage();
+        if (throttleMessage != null) {
+            loginError.setValue(throttleMessage);
+            return;
+        }
+
         if (appPreferences.verifyPin(pin)) {
+            appPreferences.clearAdminPinFailures();
             // Automatically set admin setup to true so session skipping works
             appPreferences.setAdminSetup(true);
             // See setupAdminProfile() above: clear any stale agent session so the app routes
@@ -67,6 +65,7 @@ public class LoginViewModel extends AndroidViewModel {
             appPreferences.clearAgentSession();
             loginSuccess.setValue(true);
         } else {
+            appPreferences.recordAdminPinFailure();
             loginError.setValue("Invalid PIN");
         }
     }

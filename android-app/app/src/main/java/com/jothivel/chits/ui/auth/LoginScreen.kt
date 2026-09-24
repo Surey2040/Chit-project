@@ -15,6 +15,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Backspace
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -424,6 +425,29 @@ fun AgentPinLoginScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
+        // The field is read-only (the custom NumberPad drives it, not the system keyboard), so
+        // it never gains real focus and never shows a real blinking text cursor - without this,
+        // there was no visual cue at all for "this is where you're typing", unlike the PIN dots
+        // below (or the Admin PIN screen) which animate as each digit lands.
+        val phoneActive = phone.isNotEmpty() && phone.length < 10
+        val phoneComplete = phone.length == 10
+        val phoneBorderColor by animateColorAsState(
+            targetValue = when {
+                phoneComplete -> PinDotFilled
+                phoneActive -> AccentGold.copy(alpha = 0.85f)
+                else -> Color.White.copy(alpha = 0.25f)
+            },
+            animationSpec = tween(250),
+            label = "phoneBorderColor"
+        )
+        val cursorTransition = rememberInfiniteTransition(label = "phoneCursor")
+        val cursorAlpha by cursorTransition.animateFloat(
+            initialValue = 1f,
+            targetValue = 0f,
+            animationSpec = infiniteRepeatable(animation = tween(550), repeatMode = RepeatMode.Reverse),
+            label = "phoneCursorAlpha"
+        )
+
         OutlinedTextField(
             value = phone,
             onValueChange = {},
@@ -434,9 +458,16 @@ fun AgentPinLoginScreen(
             enabled = !isLoading,
             textStyle = LocalTextStyle.current.copy(color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium),
             shape = RoundedCornerShape(12.dp),
+            trailingIcon = {
+                when {
+                    phoneComplete -> Icon(Icons.Default.CheckCircle, contentDescription = null, tint = PinDotFilled, modifier = Modifier.size(18.dp))
+                    phoneActive -> Box(Modifier.width(2.dp).height(20.dp).background(AccentGold.copy(alpha = cursorAlpha), RoundedCornerShape(1.dp)))
+                }
+            },
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = AccentGold.copy(alpha = 0.8f),
-                unfocusedBorderColor = Color.White.copy(alpha = 0.25f),
+                focusedBorderColor = phoneBorderColor,
+                unfocusedBorderColor = phoneBorderColor,
+                disabledBorderColor = phoneBorderColor,
                 cursorColor = AccentGold,
                 focusedContainerColor = GlassWhite.copy(alpha = 0.08f),
                 unfocusedContainerColor = Color.Transparent,

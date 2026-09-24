@@ -6,35 +6,12 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material3.Scaffold
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Modifier
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import com.jothivel.chits.ui.base.BaseActivity
-import com.jothivel.chits.ui.dashboard.DashboardScreen
-import com.jothivel.chits.ui.dashboard.DashboardViewModel
-import com.jothivel.chits.ui.ledger.LedgerScreen
-import com.jothivel.chits.ui.ledger.LedgerViewModel
-import com.jothivel.chits.ui.members.AddMemberPage
-import com.jothivel.chits.ui.members.MemberViewModel
 import com.jothivel.chits.ui.settings.CsvImportActivity
-import com.jothivel.chits.ui.settings.SettingsScreen
 import com.jothivel.chits.ui.theme.JothiVelChitsTheme
 import com.jothivel.chits.ui.theme.OffWhite
 import kotlinx.coroutines.launch
-import com.jothivel.chits.ui.groups.GroupListScreen
-import com.jothivel.chits.ui.groups.GroupViewModel
-import com.jothivel.chits.ui.components.AppBottomNavPager
-import com.jothivel.chits.ui.collections.PaymentViewModel
 import com.jothivel.chits.utils.DataBackupHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -113,21 +90,17 @@ class MainHostActivity : BaseActivity() {
     }
 
     private fun showMainContent() {
-        val dashboardViewModel = ViewModelProvider(this)[DashboardViewModel::class.java]
-        val ledgerViewModel = ViewModelProvider(this)[LedgerViewModel::class.java]
-        val memberViewModel = ViewModelProvider(this)[MemberViewModel::class.java]
-        val groupViewModel = ViewModelProvider(this)[GroupViewModel::class.java]
-        val paymentViewModel = ViewModelProvider(this)[PaymentViewModel::class.java]
-
         setContent {
             JothiVelChitsTheme {
                 MainHostScreen(
-                    dashboardViewModel,
-                    groupViewModel,
-                    memberViewModel,
-                    ledgerViewModel,
-                    paymentViewModel,
                     onLogout = {
+                        // Agent sessions cache identity + PIN hash + assigned groups locally so
+                        // login still works offline (see AppPreferences.saveAgentSession) - an
+                        // explicit Logout must wipe that cache, same as the admin PIN-login path
+                        // already does in LoginViewModel, or the next person to use this device
+                        // could still see the previous agent's name/phone/assigned groups, and a
+                        // deactivated agent could keep logging back in offline via the stale cache.
+                        com.jothivel.chits.utils.AppPreferences(this@MainHostActivity).clearAgentSession()
                         com.jothivel.chits.ui.auth.LoginActivity.isSessionActive = false
                         val intent = Intent(this@MainHostActivity, com.jothivel.chits.ui.auth.LoginActivity::class.java).apply {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)

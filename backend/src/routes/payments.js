@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { Payment, Installment, ChitGroup, User, sequelize } = require('../models');
+const { Payment, Installment, ChitGroup, User, MemberSubscription, sequelize } = require('../models');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const crypto = require('crypto');
 const { generateReceiptPdf } = require('../utils/pdfGenerator');
@@ -65,6 +65,15 @@ router.post('/', requireRole(['ADMIN', 'AGENT']), async (req, res) => {
         if (!installment) {
             await t.rollback();
             return res.status(404).json({ errorCode: 'NOT_FOUND', message: 'Installment not found' });
+        }
+
+        const subscription = await MemberSubscription.findOne({
+            where: { groupId: installment.groupId, memberId },
+            transaction: t
+        });
+        if (!subscription) {
+            await t.rollback();
+            return res.status(400).json({ errorCode: 'VALIDATION_ERROR', message: 'Member is not subscribed to the group this installment belongs to', field: 'memberId' });
         }
 
         const existingPayment = await Payment.findOne({

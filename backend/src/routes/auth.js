@@ -116,27 +116,51 @@ router.post('/refresh-token', async (req, res) => {
     try {
         const { refreshToken } = req.body;
         if (!refreshToken) {
-            return res.status(401).json({ message: 'Refresh token required' });
+            return res.status(401).json({
+                errorCode: 'UNAUTHORIZED',
+                message: 'Refresh token required',
+                field: 'refreshToken'
+            });
         }
 
-        jwt.verify(refreshToken, REFRESH_TOKEN_SECRET, (err, decoded) => {
+        jwt.verify(refreshToken, REFRESH_TOKEN_SECRET, async (err, decoded) => {
             if (err) {
-                return res.status(403).json({ message: 'Invalid or expired refresh token' });
+                return res.status(403).json({
+                    errorCode: 'FORBIDDEN',
+                    message: 'Invalid or expired refresh token',
+                    field: 'refreshToken'
+                });
             }
 
-            const payload = {
-                id: decoded.id,
-                phone: decoded.phone,
-                username: decoded.username,
-                role: decoded.role
-            };
+            try {
+                // Re-check the user against the DB rather than trusting the JWT payload alone -
+                // the account may have been deactivated or deleted since the refresh token was issued.
+                const user = await User.findByPk(decoded.id);
+                if (!user || !user.isActive) {
+                    return res.status(401).json({
+                        errorCode: 'UNAUTHORIZED',
+                        message: 'Account is no longer active',
+                        field: 'refreshToken'
+                    });
+                }
 
-            const accessToken = jwt.sign(payload, JWT_SECRET, { expiresIn: '15m' });
-            res.json({ accessToken });
+                const payload = {
+                    id: user.id,
+                    phone: user.phone,
+                    username: user.username,
+                    role: user.role
+                };
+
+                const accessToken = jwt.sign(payload, JWT_SECRET, { expiresIn: '15m' });
+                res.json({ accessToken });
+            } catch (lookupError) {
+                console.error(lookupError);
+                res.status(500).json({ errorCode: 'SERVER_ERROR', message: 'Server error' });
+            }
         });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: 'Server error' });
+        res.status(500).json({ errorCode: 'SERVER_ERROR', message: 'Server error' });
     }
 });
 

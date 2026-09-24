@@ -25,7 +25,7 @@ object FirestoreDataSync {
             ?: return Result.failure(IllegalStateException("Firebase not configured, or not signed in. Add app/google-services.json and check connectivity."))
         return try {
             val db = AppDatabase.getDatabase(context)
-            val groups = db.groupDao().getAllGroupsSync().filter { it.status == "ACTIVE" }
+            val groups = db.groupDao().getAllGroupsSync().filter { it.status.isNullOrBlank() || it.status == "ACTIVE" }
             val groupIds = groups.mapTo(hashSetOf()) { it.id }
             val members = db.memberDao().getAllMembersSync().filter { it.isActive }
             val memberships = db.membershipDao().getAllActiveSync().filter { it.groupId in groupIds }
@@ -74,14 +74,36 @@ object FirestoreDataSync {
             db.groupDao().insertAll(groups)
 
             val members = firestore.collection(FirestoreSchema.MEMBERS).get().await().documents.map { doc ->
+                // Fall back to the existing local row for any field the cloud document doesn't
+                // carry (e.g. an older snapshot predating a schema addition, or a partial write) -
+                // insertAll below REPLACEs the whole row, so a missing field here would otherwise
+                // null it out even though it's already correctly stored locally.
+                val existing = db.memberDao().getMemberByIdSync(doc.id)
                 MemberEntity().apply {
                     id = doc.id
-                    name = doc.getString("name")
-                    phone = doc.getString("phone")
-                    ticketNo = doc.getString("ticketNo")
-                    selectedChitId = doc.getString("selectedChitId")
-                    installmentAmount = doc.getString("installmentAmount")
-                    isActive = doc.getBoolean("isActive") ?: true
+                    name = doc.getString("name") ?: existing?.name
+                    phone = doc.getString("phone") ?: existing?.phone
+                    photoUrl = doc.getString("photoUrl") ?: existing?.photoUrl
+                    nomineeName = doc.getString("nomineeName") ?: existing?.nomineeName
+                    nomineePhone = doc.getString("nomineePhone") ?: existing?.nomineePhone
+                    role = doc.getString("role") ?: existing?.role
+                    isActive = doc.getBoolean("isActive") ?: existing?.isActive ?: true
+                    dob = doc.getString("dob") ?: existing?.dob
+                    gender = doc.getString("gender") ?: existing?.gender
+                    addressLine = doc.getString("addressLine") ?: existing?.addressLine
+                    city = doc.getString("city") ?: existing?.city
+                    state = doc.getString("state") ?: existing?.state
+                    pincode = doc.getString("pincode") ?: existing?.pincode
+                    aadhaarNoEncrypted = doc.getString("aadhaarNoEncrypted") ?: existing?.aadhaarNoEncrypted
+                    panNo = doc.getString("panNo") ?: existing?.panNo
+                    aadhaarDocumentPath = doc.getString("aadhaarDocumentPath") ?: existing?.aadhaarDocumentPath
+                    panDocumentPath = doc.getString("panDocumentPath") ?: existing?.panDocumentPath
+                    selectedChitId = doc.getString("selectedChitId") ?: existing?.selectedChitId
+                    ticketNo = doc.getString("ticketNo") ?: existing?.ticketNo
+                    installmentAmount = doc.getString("installmentAmount") ?: existing?.installmentAmount
+                    joiningDate = doc.getString("joiningDate") ?: existing?.joiningDate
+                    dueDate = doc.getString("dueDate") ?: existing?.dueDate
+                    nomineeRelationship = doc.getString("nomineeRelationship") ?: existing?.nomineeRelationship
                 }
             }
             db.memberDao().insertAll(members)
@@ -171,10 +193,27 @@ object FirestoreDataSync {
     private fun memberMap(member: MemberEntity): Map<String, Any?> = mapOf(
         "name" to member.name,
         "phone" to member.phone,
-        "ticketNo" to member.ticketNo,
+        "photoUrl" to member.photoUrl,
+        "nomineeName" to member.nomineeName,
+        "nomineePhone" to member.nomineePhone,
+        "role" to member.role,
+        "isActive" to member.isActive,
+        "dob" to member.dob,
+        "gender" to member.gender,
+        "addressLine" to member.addressLine,
+        "city" to member.city,
+        "state" to member.state,
+        "pincode" to member.pincode,
+        "aadhaarNoEncrypted" to member.aadhaarNoEncrypted,
+        "panNo" to member.panNo,
+        "aadhaarDocumentPath" to member.aadhaarDocumentPath,
+        "panDocumentPath" to member.panDocumentPath,
         "selectedChitId" to member.selectedChitId,
+        "ticketNo" to member.ticketNo,
         "installmentAmount" to member.installmentAmount,
-        "isActive" to member.isActive
+        "joiningDate" to member.joiningDate,
+        "dueDate" to member.dueDate,
+        "nomineeRelationship" to member.nomineeRelationship
     )
 
     private fun membershipMap(membership: ChitMembershipEntity): Map<String, Any?> = mapOf(

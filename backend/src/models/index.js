@@ -80,6 +80,10 @@ const Payout = sequelize.define('Payout', {
   amount: { type: DataTypes.INTEGER, allowNull: false },
   proofUrl: { type: DataTypes.STRING, allowNull: false },
   disbursedAt: { type: DataTypes.DATE, allowNull: false }
+}, {
+  indexes: [
+    { unique: true, fields: ['installmentId'] }
+  ]
 });
 
 // Relationships

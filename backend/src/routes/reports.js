@@ -13,7 +13,7 @@ router.get('/dashboard', requireRole(['ADMIN', 'AGENT']), async (req, res) => {
         const activeChits = await ChitGroup.findAll({ where: { status: 'ACTIVE' }, attributes: ['chitValue'] });
         const totalChitValue = activeChits.reduce((sum, c) => sum + c.chitValue, 0);
 
-        const totalMembers = await User.count({ where: { role: 'AGENT' } }); // Or maybe count distinct MemberSubscription
+        const totalMembers = await User.count({ where: { role: 'MEMBER' } });
         
         // Month collected
         const startOfMonth = new Date();
@@ -34,7 +34,7 @@ router.get('/dashboard', requireRole(['ADMIN', 'AGENT']), async (req, res) => {
         res.json({
             activeChitsCount,
             totalChitValue,
-            totalMembers, // Temp simple count
+            totalMembers,
             monthCollected: monthCollected || 0,
             pendingPaymentsCount
         });

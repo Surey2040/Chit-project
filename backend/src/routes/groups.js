@@ -124,7 +124,20 @@ router.put('/:id', requireRole(['ADMIN']), async (req, res) => {
             }
         }
 
-        await group.update(req.body);
+        // Only allow the legitimately-editable fields through. `status` and `createdBy`
+        // are intentionally excluded: status transitions must go through the dedicated
+        // /:id/activate endpoint (and any future equivalents) that validate invariants
+        // such as durationMonths === subscriberCount and all slots being filled.
+        const { registerNo, chitValue, durationMonths, subscriberCount, branch, startDate } = req.body;
+        const updatableFields = {};
+        if (registerNo !== undefined) updatableFields.registerNo = registerNo;
+        if (chitValue !== undefined) updatableFields.chitValue = chitValue;
+        if (durationMonths !== undefined) updatableFields.durationMonths = durationMonths;
+        if (subscriberCount !== undefined) updatableFields.subscriberCount = subscriberCount;
+        if (branch !== undefined) updatableFields.branch = branch;
+        if (startDate !== undefined) updatableFields.startDate = startDate;
+
+        await group.update(updatableFields);
         res.json(group);
     } catch (error) {
         res.status(500).json({ errorCode: 'SERVER_ERROR', message: error.message });

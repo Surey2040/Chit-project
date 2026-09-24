@@ -7,7 +7,6 @@ import com.jothivel.chits.ui.base.BaseActivity
 import androidx.activity.compose.setContent
 import androidx.lifecycle.ViewModelProvider
 import com.jothivel.chits.ui.components.SmoothTransitions
-import com.jothivel.chits.ui.dashboard.DashboardActivity
 import com.jothivel.chits.ui.MainHostActivity
 import com.jothivel.chits.ui.theme.JothiVelChitsTheme
 import com.jothivel.chits.utils.AppPreferences

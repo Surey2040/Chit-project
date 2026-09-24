@@ -65,14 +65,36 @@ object AgentDataSync {
             val memberIds = memberships.map { it.memberId }.distinct()
             val members = memberIds.mapNotNull { memberId ->
                 val doc = firestore.collection(FirestoreSchema.MEMBERS).document(memberId).get().await()
-                if (!doc.exists()) null else MemberEntity().apply {
+                if (!doc.exists()) return@mapNotNull null
+                // Fall back to the existing local row for any field the cloud document doesn't
+                // carry - insertAll below REPLACEs the whole row, so a missing field here would
+                // otherwise null it out even though it's already correctly stored locally.
+                val existing = db.memberDao().getMemberByIdSync(memberId)
+                MemberEntity().apply {
                     id = memberId
-                    name = doc.getString("name")
-                    phone = doc.getString("phone")
-                    ticketNo = doc.getString("ticketNo")
-                    selectedChitId = doc.getString("selectedChitId")
-                    installmentAmount = doc.getString("installmentAmount")
-                    isActive = doc.getBoolean("isActive") ?: true
+                    name = doc.getString("name") ?: existing?.name
+                    phone = doc.getString("phone") ?: existing?.phone
+                    photoUrl = doc.getString("photoUrl") ?: existing?.photoUrl
+                    nomineeName = doc.getString("nomineeName") ?: existing?.nomineeName
+                    nomineePhone = doc.getString("nomineePhone") ?: existing?.nomineePhone
+                    role = doc.getString("role") ?: existing?.role
+                    isActive = doc.getBoolean("isActive") ?: existing?.isActive ?: true
+                    dob = doc.getString("dob") ?: existing?.dob
+                    gender = doc.getString("gender") ?: existing?.gender
+                    addressLine = doc.getString("addressLine") ?: existing?.addressLine
+                    city = doc.getString("city") ?: existing?.city
+                    state = doc.getString("state") ?: existing?.state
+                    pincode = doc.getString("pincode") ?: existing?.pincode
+                    aadhaarNoEncrypted = doc.getString("aadhaarNoEncrypted") ?: existing?.aadhaarNoEncrypted
+                    panNo = doc.getString("panNo") ?: existing?.panNo
+                    aadhaarDocumentPath = doc.getString("aadhaarDocumentPath") ?: existing?.aadhaarDocumentPath
+                    panDocumentPath = doc.getString("panDocumentPath") ?: existing?.panDocumentPath
+                    selectedChitId = doc.getString("selectedChitId") ?: existing?.selectedChitId
+                    ticketNo = doc.getString("ticketNo") ?: existing?.ticketNo
+                    installmentAmount = doc.getString("installmentAmount") ?: existing?.installmentAmount
+                    joiningDate = doc.getString("joiningDate") ?: existing?.joiningDate
+                    dueDate = doc.getString("dueDate") ?: existing?.dueDate
+                    nomineeRelationship = doc.getString("nomineeRelationship") ?: existing?.nomineeRelationship
                 }
             }
             db.memberDao().insertAll(members)

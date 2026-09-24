@@ -19,6 +19,11 @@ class AppPreferences(context: Context) {
         private const val KEY_IS_LOGGED_IN = "is_logged_in"
         private const val KEY_LANGUAGE = "app_language"
         private const val KEY_LAST_BACKUP_AT = "last_backup_at"
+        private const val KEY_LAST_CLOUD_SYNC_AT = "last_cloud_sync_at"
+        private const val KEY_ADMIN_PIN_FAIL_COUNT = "admin_pin_fail_count"
+        private const val KEY_ADMIN_PIN_FAIL_FIRST_AT = "admin_pin_fail_first_at"
+        private const val ADMIN_PIN_ATTEMPT_LIMIT = 5
+        private const val ADMIN_PIN_ATTEMPT_WINDOW_MS = 15 * 60 * 1000L
 
         const val ROLE_ADMIN = "ADMIN"
         const val ROLE_AGENT = "AGENT"
@@ -87,6 +92,45 @@ class AppPreferences(context: Context) {
         return verifyPinHash(pin, stored)
     }
 
+    /** Changes the admin PIN after verifying [currentPin] - the only in-app way to ever move the
+     *  PIN off its default (see [verifyPin]'s "blank stored PIN accepts 1234" fallback). Returns
+     *  false without changing anything if the current PIN is wrong or the new PIN isn't 4 digits. */
+    fun changePin(currentPin: String, newPin: String): Boolean {
+        if (!verifyPin(currentPin)) return false
+        if (newPin.length != 4 || !newPin.all(Char::isDigit)) return false
+        savePin(newPin)
+        return true
+    }
+
+    /** Returns a "too many attempts" message if the admin PIN entry is currently throttled, else
+     *  null. Client-side only (mirrors AgentAuthRepository's agent-PIN throttle) - slows down
+     *  someone guessing through the UI, not a substitute for the hash strength itself. */
+    fun adminPinThrottleMessage(): String? {
+        val count = prefs.getInt(KEY_ADMIN_PIN_FAIL_COUNT, 0)
+        val firstAttempt = prefs.getLong(KEY_ADMIN_PIN_FAIL_FIRST_AT, 0L)
+        val elapsed = System.currentTimeMillis() - firstAttempt
+        if (count >= ADMIN_PIN_ATTEMPT_LIMIT && elapsed < ADMIN_PIN_ATTEMPT_WINDOW_MS) {
+            val retryAfterMinutes = ((ADMIN_PIN_ATTEMPT_WINDOW_MS - elapsed) / 60000L) + 1
+            return "Too many attempts. Try again in $retryAfterMinutes minute(s)."
+        }
+        return null
+    }
+
+    fun recordAdminPinFailure() {
+        val now = System.currentTimeMillis()
+        val firstAttempt = prefs.getLong(KEY_ADMIN_PIN_FAIL_FIRST_AT, 0L)
+        val count = prefs.getInt(KEY_ADMIN_PIN_FAIL_COUNT, 0)
+        if (firstAttempt == 0L || now - firstAttempt >= ADMIN_PIN_ATTEMPT_WINDOW_MS) {
+            prefs.edit().putInt(KEY_ADMIN_PIN_FAIL_COUNT, 1).putLong(KEY_ADMIN_PIN_FAIL_FIRST_AT, now).apply()
+        } else {
+            prefs.edit().putInt(KEY_ADMIN_PIN_FAIL_COUNT, count + 1).apply()
+        }
+    }
+
+    fun clearAdminPinFailures() {
+        prefs.edit().remove(KEY_ADMIN_PIN_FAIL_COUNT).remove(KEY_ADMIN_PIN_FAIL_FIRST_AT).apply()
+    }
+
     fun saveAdminProfile(name: String, phone: String, username: String) {
         prefs.edit()
             .putString(KEY_ADMIN_NAME, name)
@@ -105,6 +149,8 @@ class AppPreferences(context: Context) {
 
     fun setLastBackupAt(value: Long = System.currentTimeMillis()) { prefs.edit().putLong(KEY_LAST_BACKUP_AT, value).apply() }
     fun getLastBackupAt(): Long = prefs.getLong(KEY_LAST_BACKUP_AT, 0L)
+    fun setLastCloudSyncAt(value: Long = System.currentTimeMillis()) { prefs.edit().putLong(KEY_LAST_CLOUD_SYNC_AT, value).apply() }
+    fun getLastCloudSyncAt(): Long = prefs.getLong(KEY_LAST_CLOUD_SYNC_AT, 0L)
 
     // ── Role / Labour (field agent) session ──────────────────────────────
     fun getUserRole(): String = prefs.getString(KEY_USER_ROLE, ROLE_ADMIN) ?: ROLE_ADMIN

@@ -15,6 +15,7 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextFieldColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -44,7 +45,8 @@ fun PremiumInputField(
     singleLine: Boolean = true,
     minLines: Int = 1,
     readOnly: Boolean = false,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    colors: TextFieldColors? = null
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
@@ -72,7 +74,7 @@ fun PremiumInputField(
         interactionSource = interactionSource,
         textStyle = LocalTextStyle.current.copy(fontSize = 12.sp, fontWeight = FontWeight.Medium),
         shape = shape,
-        colors = OutlinedTextFieldDefaults.colors(
+        colors = colors ?: OutlinedTextFieldDefaults.colors(
             focusedBorderColor = MaroonPrimary,
             unfocusedBorderColor = Color(0xFFD7D4D5),
             focusedContainerColor = Color.White,
@@ -84,3 +86,18 @@ fun PremiumInputField(
         )
     )
 }
+
+/**
+ * Same visual styling as the normal (enabled) field, just applied to enabled=false - for
+ * dropdown/picker triggers that must render like a regular text field (not visibly "disabled")
+ * while a wrapping clickable intercepts the tap instead of the keyboard.
+ */
+@Composable
+fun premiumInputFieldTriggerColors(): TextFieldColors = OutlinedTextFieldDefaults.colors(
+    disabledBorderColor = Color(0xFFD7D4D5),
+    disabledContainerColor = Color(0xFFFFFEFD),
+    disabledTextColor = Color(0xFF1A1A1A),
+    disabledLabelColor = TextGray,
+    disabledPlaceholderColor = TextGray.copy(alpha = .75f),
+    disabledTrailingIconColor = TextGray
+)

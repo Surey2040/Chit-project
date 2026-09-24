@@ -23,4 +23,13 @@ public interface CollectionReceiptDao {
 
     @Query("SELECT COUNT(*) FROM collection_receipts WHERE businessDate = :businessDate AND status = 'SAVED'")
     int getCountForDateSync(String businessDate);
+
+    // Real-clock "today" (paidAt-based), matching the labour app's own Today summary - used
+    // wherever admin screens need to agree with what the field agent actually sees as "today",
+    // instead of the separately-editable businessDate field on the receipt.
+    @Query("SELECT COALESCE(SUM(amountPaidPaise), 0) FROM collection_receipts WHERE paidAt >= :startMillis AND paidAt < :endMillis AND status = 'SAVED'")
+    long getTotalForTimeRangeSync(long startMillis, long endMillis);
+
+    @Query("SELECT COUNT(*) FROM collection_receipts WHERE paidAt >= :startMillis AND paidAt < :endMillis AND status = 'SAVED'")
+    int getCountForTimeRangeSync(long startMillis, long endMillis);
 }

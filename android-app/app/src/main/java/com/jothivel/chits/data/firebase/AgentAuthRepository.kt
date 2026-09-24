@@ -3,6 +3,7 @@ package com.jothivel.chits.data.firebase
 import android.content.Context
 import com.google.firebase.firestore.FieldValue
 import com.jothivel.chits.utils.AppPreferences
+import org.json.JSONObject
 
 sealed class AgentLoginResult {
     data class Success(val agentId: String, val name: String, val assignedGroups: List<String>) : AgentLoginResult()
@@ -24,8 +25,20 @@ data class AgentSummary(
  */
 object AgentAuthRepository {
 
+    // Client-side login throttling only (mirrors the pattern backend/src/routes/auth.js uses
+    // server-side for its own login). This slows down someone brute-forcing PINs THROUGH the
+    // app's UI, but does nothing against an attacker who bypasses the app and reads/queries
+    // Firestore directly (see firestore.rules header comment for why that path can't be closed
+    // with rules alone here) - it is a mitigation, not a fix.
+    private const val LOGIN_ATTEMPTS_PREFS = "jvc_agent_login_attempts"
+    private const val LOGIN_ATTEMPT_LIMIT = 5
+    private const val LOGIN_ATTEMPT_WINDOW_MS = 15 * 60 * 1000L
+    private const val GENERIC_LOGIN_FAILURE = "Invalid phone number or PIN."
+
     suspend fun login(context: Context, phone: String, pin: String): AgentLoginResult {
         val prefs = AppPreferences(context)
+        val throttled = throttleMessage(context, phone)
+        if (throttled != null) return AgentLoginResult.Failure(throttled)
         val firestore = FirebaseSetup.firestoreIfSignedIn(context) ?: return loginFromCache(prefs, phone, pin)
         return try {
             val snapshot = firestore.collection(FirestoreSchema.AGENTS)
@@ -37,19 +50,55 @@ object AgentAuthRepository {
                 ?: return if (prefs.getAgentPhone() == phone && prefs.getAgentId().isNotBlank()) {
                     loginFromCache(prefs, phone, pin)
                 } else {
-                    AgentLoginResult.Failure("Phone number not registered. Contact admin.")
+                    recordLoginFailure(context, phone)
+                    AgentLoginResult.Failure(GENERIC_LOGIN_FAILURE)
                 }
             val isActive = doc.getBoolean(FirestoreSchema.Agent.IS_ACTIVE) ?: false
             if (!isActive) return AgentLoginResult.Failure("Your account has been disconnected. Contact admin.")
             val storedHash = doc.getString(FirestoreSchema.Agent.PIN_HASH).orEmpty()
-            if (!AppPreferences.verifyPinHash(pin, storedHash)) return AgentLoginResult.Failure("Invalid PIN")
+            if (!AppPreferences.verifyPinHash(pin, storedHash)) {
+                recordLoginFailure(context, phone)
+                return AgentLoginResult.Failure(GENERIC_LOGIN_FAILURE)
+            }
             val name = doc.getString(FirestoreSchema.Agent.NAME).orEmpty()
             @Suppress("UNCHECKED_CAST")
             val assignedGroups = (doc.get(FirestoreSchema.Agent.ASSIGNED_GROUPS) as? List<String>).orEmpty()
             prefs.saveAgentSession(doc.id, name, phone, storedHash, true, assignedGroups)
+            clearLoginFailures(context, phone)
             AgentLoginResult.Success(doc.id, name, assignedGroups)
         } catch (e: Exception) {
             loginFromCache(prefs, phone, pin)
+        }
+    }
+
+    /**
+     * Live Firestore check of the *currently logged-in* agent's isActive flag, used to revoke
+     * access mid-session - not just at the next login - when the admin deactivates them while
+     * their app stays open or they're working offline (see AgentAppFlow's periodic call to this).
+     * On success it also refreshes the cached name/assignedGroups/pinHash so a later offline
+     * login reflects the latest known state. Returns null (never act on it) when the check
+     * couldn't be performed - offline, no cached session, or a Firestore error - so a network
+     * hiccup never forces a false logout.
+     */
+    suspend fun refreshAndCheckActive(context: Context): Boolean? {
+        val prefs = AppPreferences(context)
+        val agentId = prefs.getAgentId()
+        if (agentId.isBlank()) return null
+        val firestore = FirebaseSetup.firestoreIfSignedIn(context) ?: return null
+        return try {
+            val doc = firestore.collection(FirestoreSchema.AGENTS).document(agentId).get().await()
+            if (!doc.exists()) return false
+            val isActive = doc.getBoolean(FirestoreSchema.Agent.IS_ACTIVE) ?: false
+            if (isActive) {
+                @Suppress("UNCHECKED_CAST")
+                val assignedGroups = (doc.get(FirestoreSchema.Agent.ASSIGNED_GROUPS) as? List<String>).orEmpty()
+                val storedHash = doc.getString(FirestoreSchema.Agent.PIN_HASH)?.takeIf { it.isNotBlank() } ?: prefs.getCachedAgentPinHash()
+                val name = doc.getString(FirestoreSchema.Agent.NAME)?.takeIf { it.isNotBlank() } ?: prefs.getAgentName()
+                prefs.saveAgentSession(agentId, name, prefs.getAgentPhone(), storedHash, true, assignedGroups)
+            }
+            isActive
+        } catch (e: Exception) {
+            null
         }
     }
 
@@ -58,8 +107,60 @@ object AgentAuthRepository {
             return AgentLoginResult.Failure("No internet connection. Connect once to verify your account.")
         }
         if (!prefs.isAgentActiveCached()) return AgentLoginResult.Failure("Your account has been disconnected. Contact admin.")
-        if (!AppPreferences.verifyPinHash(pin, prefs.getCachedAgentPinHash())) return AgentLoginResult.Failure("Invalid PIN")
+        if (!AppPreferences.verifyPinHash(pin, prefs.getCachedAgentPinHash())) return AgentLoginResult.Failure(GENERIC_LOGIN_FAILURE)
         return AgentLoginResult.Success(prefs.getAgentId(), prefs.getAgentName(), prefs.getAgentAssignedGroups())
+    }
+
+    // ── Login attempt throttling (per phone number, SharedPreferences-backed) ────────────────
+
+    /** Returns a user-facing "too many attempts" message if [phone] is currently throttled, else null. */
+    private fun throttleMessage(context: Context, phone: String): String? {
+        val entry = readAttempts(context).optJSONObject(phone) ?: return null
+        val count = entry.optInt("count", 0)
+        val firstAttempt = entry.optLong("firstAttempt", 0L)
+        val elapsed = System.currentTimeMillis() - firstAttempt
+        if (count >= LOGIN_ATTEMPT_LIMIT && elapsed < LOGIN_ATTEMPT_WINDOW_MS) {
+            val retryAfterMinutes = ((LOGIN_ATTEMPT_WINDOW_MS - elapsed) / 60000L) + 1
+            return "Too many attempts. Try again in $retryAfterMinutes minute(s)."
+        }
+        return null
+    }
+
+    private fun recordLoginFailure(context: Context, phone: String) {
+        val root = readAttempts(context)
+        val now = System.currentTimeMillis()
+        val existing = root.optJSONObject(phone)
+        val firstAttempt = existing?.optLong("firstAttempt", 0L) ?: 0L
+        val stillInWindow = existing != null && (now - firstAttempt) < LOGIN_ATTEMPT_WINDOW_MS
+        val entry = JSONObject()
+        if (stillInWindow) {
+            entry.put("count", (existing?.optInt("count", 0) ?: 0) + 1)
+            entry.put("firstAttempt", firstAttempt)
+        } else {
+            entry.put("count", 1)
+            entry.put("firstAttempt", now)
+        }
+        root.put(phone, entry)
+        writeAttempts(context, root)
+    }
+
+    private fun clearLoginFailures(context: Context, phone: String) {
+        val root = readAttempts(context)
+        if (root.has(phone)) {
+            root.remove(phone)
+            writeAttempts(context, root)
+        }
+    }
+
+    private fun readAttempts(context: Context): JSONObject {
+        val raw = context.getSharedPreferences(LOGIN_ATTEMPTS_PREFS, Context.MODE_PRIVATE).getString("attempts", null)
+            ?: return JSONObject()
+        return runCatching { JSONObject(raw) }.getOrDefault(JSONObject())
+    }
+
+    private fun writeAttempts(context: Context, root: JSONObject) {
+        context.getSharedPreferences(LOGIN_ATTEMPTS_PREFS, Context.MODE_PRIVATE)
+            .edit().putString("attempts", root.toString()).apply()
     }
 
     // ── Admin-side management (Labour screen) ────────────────────────────

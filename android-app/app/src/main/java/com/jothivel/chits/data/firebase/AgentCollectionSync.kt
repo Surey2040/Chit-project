@@ -3,6 +3,8 @@ package com.jothivel.chits.data.firebase
 import android.content.Context
 import com.google.firebase.firestore.FieldValue
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -40,44 +42,56 @@ object AgentCollectionSync {
     private const val PREFS_NAME = "jvc_pending_collections"
     private const val KEY_QUEUE = "queue"
 
+    // queue() and flushPending() both do a read-modify-write on the same SharedPreferences-backed
+    // queue. Without serialization, a queue() call landing while flushPending() is mid-flight
+    // (its network awaits can span multiple documents) would read the queue before
+    // flushPending's final writeQueue() runs, and flushPending's write of "remaining" would then
+    // clobber the newly-queued entry, losing it. A coroutine Mutex (not a blocking `synchronized`,
+    // since both functions are suspend and flushPending suspends across network calls) makes the
+    // two mutually exclusive.
+    private val queueMutex = Mutex()
+
     suspend fun push(context: Context, doc: AgentCollectionDoc): Boolean = withContext(Dispatchers.IO) {
         val firestore = FirebaseSetup.firestoreIfSignedIn(context)
         if (firestore == null) {
-            queue(context, doc)
+            queueMutex.withLock { queueLocked(context, doc) }
             return@withContext false
         }
         try {
             firestore.collection(FirestoreSchema.COLLECTIONS).document(doc.requestId).set(toMap(doc)).await()
             true
         } catch (e: Exception) {
-            queue(context, doc)
+            queueMutex.withLock { queueLocked(context, doc) }
             false
         }
     }
 
     suspend fun flushPending(context: Context): Int = withContext(Dispatchers.IO) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val pending = readQueue(prefs)
-        if (pending.isEmpty()) return@withContext 0
-        val firestore = FirebaseSetup.firestoreIfSignedIn(context) ?: return@withContext 0
-        var flushed = 0
-        val remaining = mutableListOf<AgentCollectionDoc>()
-        pending.forEach { doc ->
-            try {
-                firestore.collection(FirestoreSchema.COLLECTIONS).document(doc.requestId).set(toMap(doc)).await()
-                flushed++
-            } catch (e: Exception) {
-                remaining += doc
+        queueMutex.withLock {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val pending = readQueue(prefs)
+            if (pending.isEmpty()) return@withLock 0
+            val firestore = FirebaseSetup.firestoreIfSignedIn(context) ?: return@withLock 0
+            var flushed = 0
+            val remaining = mutableListOf<AgentCollectionDoc>()
+            pending.forEach { doc ->
+                try {
+                    firestore.collection(FirestoreSchema.COLLECTIONS).document(doc.requestId).set(toMap(doc)).await()
+                    flushed++
+                } catch (e: Exception) {
+                    remaining += doc
+                }
             }
+            writeQueue(prefs, remaining)
+            flushed
         }
-        writeQueue(prefs, remaining)
-        flushed
     }
 
     fun pendingCount(context: Context): Int =
         readQueue(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)).size
 
-    private fun queue(context: Context, doc: AgentCollectionDoc) {
+    /** Caller must hold [queueMutex]. */
+    internal fun queueLocked(context: Context, doc: AgentCollectionDoc) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val current = readQueue(prefs).filterNot { it.requestId == doc.requestId }
         writeQueue(prefs, current + doc)
@@ -102,7 +116,7 @@ object AgentCollectionSync {
         FirestoreSchema.Collection.REQUEST_ID to doc.requestId
     )
 
-    private fun readQueue(prefs: android.content.SharedPreferences): List<AgentCollectionDoc> {
+    internal fun readQueue(prefs: android.content.SharedPreferences): List<AgentCollectionDoc> {
         val raw = prefs.getString(KEY_QUEUE, null) ?: return emptyList()
         return runCatching {
             val array = JSONArray(raw)
@@ -129,7 +143,7 @@ object AgentCollectionSync {
         }.getOrDefault(emptyList())
     }
 
-    private fun writeQueue(prefs: android.content.SharedPreferences, items: List<AgentCollectionDoc>) {
+    internal fun writeQueue(prefs: android.content.SharedPreferences, items: List<AgentCollectionDoc>) {
         val array = JSONArray()
         items.forEach { doc ->
             array.put(JSONObject().apply {

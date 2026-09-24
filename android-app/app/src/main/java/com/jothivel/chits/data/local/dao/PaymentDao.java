@@ -18,6 +18,9 @@ public interface PaymentDao {
     @Query("SELECT * FROM payments WHERE memberId = :memberId ORDER BY paidAt DESC")
     List<PaymentEntity> getPaymentsByMemberSync(String memberId);
 
+    @Query("SELECT * FROM payments WHERE memberId = :memberId AND groupId = :groupId ORDER BY paidAt DESC")
+    List<PaymentEntity> getPaymentsByMemberAndGroupSync(String memberId, String groupId);
+
     @Query("SELECT * FROM payments ORDER BY paidAt DESC")
     List<PaymentEntity> getAllPaymentsSync();
 
@@ -29,4 +32,10 @@ public interface PaymentDao {
     
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     void insertAll(List<PaymentEntity> payments);
+
+    @Query("DELETE FROM payments WHERE memberId = :memberId AND groupId = :groupId")
+    void deleteForMemberAndGroup(String memberId, String groupId);
+
+    @Query("DELETE FROM payments")
+    void deleteAll();
 }

@@ -36,8 +36,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jothivel.chits.ui.theme.MaroonPrimary
 
-private val SearchAsh = Color(0xFFECEDEF)
-private val SearchAshBorder = Color(0xFFD3D5D8)
+private val SearchAsh = Color(0xFFE9E6E6)
+private val SearchAshBorder = Color(0xFFAFAAAA)
 private val SearchText = Color(0xFF303236)
 
 /** Native Compose version of the expanding search pattern supplied by the client. */
@@ -68,7 +68,7 @@ fun AshAnimatedSearchBar(
                 .width(width)
                 .height(44.dp)
                 .background(SearchAsh, RoundedCornerShape(22.dp))
-                .border(1.dp, if (expanded) MaroonPrimary.copy(alpha = .35f) else SearchAshBorder, RoundedCornerShape(22.dp))
+                .border(1.5.dp, if (expanded) MaroonPrimary.copy(alpha = .5f) else SearchAshBorder, RoundedCornerShape(22.dp))
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null

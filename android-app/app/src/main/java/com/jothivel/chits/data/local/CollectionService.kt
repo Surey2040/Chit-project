@@ -1,8 +1,10 @@
 package com.jothivel.chits.data.local
 
 import com.jothivel.chits.data.local.entity.ActivityLogEntity
+import com.jothivel.chits.data.local.entity.ChitGroupEntity
 import com.jothivel.chits.data.local.entity.CollectionReceiptEntity
 import com.jothivel.chits.data.local.entity.PaymentEntity
+import com.jothivel.chits.data.models.ChitTemplate
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -47,6 +49,39 @@ object CollectionService {
     }
 
     /**
+     * Like [calculateDuePaise], but once every calendar-due installment is fully settled, looks
+     * ahead to the very next unpaid installment - regardless of whether its own calendar month
+     * has arrived yet - so the collection screen can pre-fill an amount for a member paying
+     * ahead of schedule. Deliberately NOT used for Pending/Ledger/dashboard totals: those must
+     * stay calendar-gated so a member who simply hasn't pre-paid the next month isn't
+     * misreported as overdue.
+     */
+    fun calculateCollectableDuePaise(db: AppDatabase, memberId: String, groupId: String, asOf: Date = Date()): Long {
+        val group = db.groupDao().getGroupByIdSync(groupId) ?: return 0L
+        val installments = db.installmentDao().getInstallmentsForGroupSync(groupId).sortedBy { it.installmentNo }
+        if (installments.isEmpty()) return 0L
+        val membership = db.membershipDao().getSync(memberId, groupId)
+        val payments = db.paymentDao().getPaymentsByMemberSync(memberId).filter { it.groupId == groupId }
+        val directPaid = payments.filterNot { it.installmentId.equals("ADVANCE", true) }
+            .groupBy { it.installmentId }
+            .mapValues { (_, rows) -> rows.sumOf { it.amountPaid } }
+        var advanceCredit = payments.filter { it.installmentId.equals("ADVANCE", true) }.sumOf { it.amountPaid }
+        // Walk every installment in order (not just the calendar-due ones), consuming direct
+        // payments then advance credit exactly like buildCalendarSchedule does - so a member who
+        // paid ahead in a lump sum has that credit correctly offset against the next installment
+        // shown here, instead of this looking like the full amount is freshly due.
+        for (installment in installments) {
+            val scheduled = scheduledAmountPaise(group, membership?.installmentAmountPaise, installment.baseAmount, installment.kasaruAmount).coerceAtLeast(0L)
+            var remaining = (scheduled - directPaid[installment.installmentNo.toString()].orZero()).coerceAtLeast(0L)
+            val creditUsed = minOf(advanceCredit, remaining)
+            advanceCredit -= creditUsed
+            remaining -= creditUsed
+            if (remaining > 0) return remaining
+        }
+        return 0L
+    }
+
+    /**
      * Builds the complete unpaid monthly schedule used by the dashboard calendar.
      * Direct installment payments and ADVANCE credit are consumed in installment order,
      * so a fully-covered member is never shown again as due for that month.
@@ -69,8 +104,7 @@ object CollectionService {
             var advanceCredit = payments.filter { it.installmentId.equals("ADVANCE", true) }.sumOf { it.amountPaid }
 
             installmentsByGroup[membership.groupId].orEmpty().mapNotNull { installment ->
-                val scheduled = (membership.installmentAmountPaise.takeIf { it > 0 }
-                    ?: (installment.baseAmount - (installment.kasaruAmount ?: 0)).toLong()).coerceAtLeast(0L)
+                val scheduled = scheduledAmountPaise(group, membership.installmentAmountPaise, installment.baseAmount, installment.kasaruAmount).coerceAtLeast(0L)
                 var remaining = (scheduled - directPaid[installment.installmentNo.toString()].orZero()).coerceAtLeast(0L)
                 val creditUsed = minOf(advanceCredit, remaining)
                 advanceCredit -= creditUsed
@@ -102,8 +136,7 @@ object CollectionService {
         val membership = db.membershipDao().getSync(memberId, groupId)
         val dueCount = installmentsDue(group.startDate, asOf, group.durationMonths).coerceAtMost(installments.size)
         val dueInstallments = installments.take(dueCount)
-        fun scheduledAmount(base: Int, kasaru: Int?) = (membership?.installmentAmountPaise?.takeIf { it > 0 }
-            ?: (base - (kasaru ?: 0)).toLong()).coerceAtLeast(0L)
+        fun scheduledAmount(base: Int, kasaru: Int?) = scheduledAmountPaise(group, membership?.installmentAmountPaise, base, kasaru).coerceAtLeast(0L)
         val payments = db.paymentDao().getPaymentsByMemberSync(memberId).filter { it.groupId == groupId }
         val scheduledPayable = dueInstallments.sumOf { scheduledAmount(it.baseAmount, it.kasaruAmount) }
         val totalPaid = payments.sumOf { it.amountPaid }
@@ -187,9 +220,8 @@ object CollectionService {
             var remaining = amountPaise
             installments.forEach { installment ->
                 if (remaining <= 0) return@forEach
-                val membershipAmount = db.membershipDao().getSync(memberId, groupId)?.installmentAmountPaise ?: 0L
-                val scheduled = membershipAmount.takeIf { it > 0 }
-                    ?: (installment.baseAmount - (installment.kasaruAmount ?: 0)).toLong()
+                val membershipAmount = db.membershipDao().getSync(memberId, groupId)?.installmentAmountPaise
+                val scheduled = scheduledAmountPaise(group, membershipAmount, installment.baseAmount, installment.kasaruAmount)
                 val alreadyPaid = db.paymentDao()
                     .getPaymentsForInstallmentSync(memberId, groupId, installment.installmentNo.toString())
                     .sumOf { it.amountPaid }
@@ -257,4 +289,19 @@ object CollectionService {
     }.time
 
     private fun Long?.orZero(): Long = this ?: 0L
+
+    /**
+     * The amount a member owes for one installment. Fixed-schedule plans (50K/1L/2L/3L/10L)
+     * pay a different amount every month by design, so once a group matches one of those
+     * plans, that month's plan amount always wins - a member's stored flat installmentAmountPaise
+     * (auto-filled as chitValue/months when they were added, back when every plan was flat) is
+     * ignored for those groups instead of silently overriding the real varying schedule. Only
+     * groups without a matching fixed schedule (custom/flat chit values) still honor that
+     * per-member override.
+     */
+    private fun scheduledAmountPaise(group: ChitGroupEntity, membershipOverridePaise: Long?, base: Int, kasaru: Int?): Long {
+        val flatFallback = (base - (kasaru ?: 0)).toLong()
+        val hasFixedSchedule = ChitTemplate.forChitValue(group.chitValue / 100)?.fixedSchedule?.size == group.durationMonths
+        return if (hasFixedSchedule) flatFallback else (membershipOverridePaise?.takeIf { it > 0 } ?: flatFallback)
+    }
 }

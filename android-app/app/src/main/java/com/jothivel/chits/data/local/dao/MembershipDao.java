@@ -44,4 +44,7 @@ public interface MembershipDao {
 
     @Query("UPDATE chit_memberships SET dueDate = :value WHERE memberId = :memberId AND groupId = :groupId")
     void updateDueDate(String memberId, String groupId, String value);
+
+    @Query("DELETE FROM chit_memberships")
+    void deleteAll();
 }

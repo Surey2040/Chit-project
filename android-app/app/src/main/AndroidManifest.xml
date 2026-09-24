@@ -30,21 +30,9 @@
             </intent-filter>
         </activity>
         
-        <activity android:name=".ui.dashboard.DashboardActivity" />
         <activity
             android:name=".ui.MainHostActivity"
             android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden" />
-        <activity android:name=".ui.groups.GroupListActivity" />
-        <activity android:name=".ui.groups.GroupDetailActivity" />
-        <activity android:name=".ui.groups.AddGroupActivity" />
-        <activity android:name=".ui.groups.AuctionEntryActivity" />
-        <activity android:name=".ui.groups.PayoutEntryActivity" />
-        <activity android:name=".ui.members.MemberListActivity" />
-        <activity android:name=".ui.members.AddMemberActivity" />
-        <activity android:name=".ui.members.MemberProfileActivity" />
-        <activity android:name=".ui.collections.CollectionEntryActivity" />
-        <activity android:name=".ui.ledger.LedgerActivity" />
-        <activity android:name=".ui.settings.SettingsActivity" />
         <activity android:name=".ui.settings.CsvImportActivity" />
 
         <provider
